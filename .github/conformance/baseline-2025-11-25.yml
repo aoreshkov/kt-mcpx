@@ -1,0 +1,13 @@
+# Expected failures of `conformance server --requirements 2025-11-25` against the fixture server's
+# legacy route (the SDK's own mcpStreamableHttp), on the same endpoint as the bridge. This run proves
+# the modern route leaves legacy traffic alone.
+#
+# A failing scenario that is not listed here fails CI, and so does a listed one that starts passing.
+server:
+  # Fixture tools not registered (test_elicitation_sep1034_defaults, test_elicitation_sep1330_enums).
+  # Legacy elicitation is the SDK's own behaviour; kt-mcpx does not touch it.
+  - elicitation-sep1034-defaults
+  - elicitation-sep1330-enums
+
+# Run but never scored, so not listed: json-schema-2020-12 (pending), whose input schema SDK
+# 0.16.0's ToolSchema cannot carry.

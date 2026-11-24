@@ -1,0 +1,124 @@
+public final class app/oreshkov/ktmcpx/CachePolicy {
+	public static final field Companion Lapp/oreshkov/ktmcpx/CachePolicy$Companion;
+	public synthetic fun <init> (JLapp/oreshkov/ktmcpx/CacheScope;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getScope ()Lapp/oreshkov/ktmcpx/CacheScope;
+	public final fun getTtl-UwyO8pc ()J
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class app/oreshkov/ktmcpx/CachePolicy$Companion {
+	public final fun getDEFAULT ()Lapp/oreshkov/ktmcpx/CachePolicy;
+}
+
+public final class app/oreshkov/ktmcpx/CacheScope : java/lang/Enum {
+	public static final field Private Lapp/oreshkov/ktmcpx/CacheScope;
+	public static final field Public Lapp/oreshkov/ktmcpx/CacheScope;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getWireName ()Ljava/lang/String;
+	public static fun valueOf (Ljava/lang/String;)Lapp/oreshkov/ktmcpx/CacheScope;
+	public static fun values ()[Lapp/oreshkov/ktmcpx/CacheScope;
+}
+
+public final class app/oreshkov/ktmcpx/CacheableMethod : java/lang/Enum {
+	public static final field Companion Lapp/oreshkov/ktmcpx/CacheableMethod$Companion;
+	public static final field PromptsList Lapp/oreshkov/ktmcpx/CacheableMethod;
+	public static final field ResourcesList Lapp/oreshkov/ktmcpx/CacheableMethod;
+	public static final field ResourcesRead Lapp/oreshkov/ktmcpx/CacheableMethod;
+	public static final field ResourcesTemplatesList Lapp/oreshkov/ktmcpx/CacheableMethod;
+	public static final field ServerDiscover Lapp/oreshkov/ktmcpx/CacheableMethod;
+	public static final field ToolsList Lapp/oreshkov/ktmcpx/CacheableMethod;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public final fun getMethod ()Ljava/lang/String;
+	public static fun valueOf (Ljava/lang/String;)Lapp/oreshkov/ktmcpx/CacheableMethod;
+	public static fun values ()[Lapp/oreshkov/ktmcpx/CacheableMethod;
+}
+
+public final class app/oreshkov/ktmcpx/CacheableMethod$Companion {
+	public final fun of (Ljava/lang/String;)Lapp/oreshkov/ktmcpx/CacheableMethod;
+}
+
+public final class app/oreshkov/ktmcpx/ModernBridge {
+	public fun <init> (Lio/modelcontextprotocol/kotlin/sdk/server/Server;Lkotlin/jvm/functions/Function1;)V
+	public synthetic fun <init> (Lio/modelcontextprotocol/kotlin/sdk/server/Server;Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun handle (Ljava/lang/String;Lapp/oreshkov/ktmcpx/ModernHeaders;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun handle$default (Lapp/oreshkov/ktmcpx/ModernBridge;Ljava/lang/String;Lapp/oreshkov/ktmcpx/ModernHeaders;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class app/oreshkov/ktmcpx/ModernBridge$Config {
+	public final fun cache-8Mi8wO0 (Lapp/oreshkov/ktmcpx/CacheableMethod;JLapp/oreshkov/ktmcpx/CacheScope;)V
+	public static synthetic fun cache-8Mi8wO0$default (Lapp/oreshkov/ktmcpx/ModernBridge$Config;Lapp/oreshkov/ktmcpx/CacheableMethod;JLapp/oreshkov/ktmcpx/CacheScope;ILjava/lang/Object;)V
+	public final fun getRequestTimeout-UwyO8pc ()J
+	public final fun setRequestTimeout-LRDsOJo (J)V
+}
+
+public final class app/oreshkov/ktmcpx/ModernErrorCodes {
+	public static final field HEADER_MISMATCH I
+	public static final field INSTANCE Lapp/oreshkov/ktmcpx/ModernErrorCodes;
+	public static final field INTERNAL_ERROR I
+	public static final field INVALID_PARAMS I
+	public static final field INVALID_REQUEST I
+	public static final field METHOD_NOT_FOUND I
+	public static final field MISSING_REQUIRED_CLIENT_CAPABILITY I
+	public static final field PARSE_ERROR I
+	public static final field UNSUPPORTED_PROTOCOL_VERSION I
+}
+
+public final class app/oreshkov/ktmcpx/ModernHeaderNames {
+	public static final field INSTANCE Lapp/oreshkov/ktmcpx/ModernHeaderNames;
+	public static final field METHOD Ljava/lang/String;
+	public static final field NAME Ljava/lang/String;
+	public static final field PARAM_PREFIX Ljava/lang/String;
+	public static final field PROTOCOL_VERSION Ljava/lang/String;
+}
+
+public final class app/oreshkov/ktmcpx/ModernHeaders {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getMethod ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public final fun getParams ()Ljava/util/Map;
+	public final fun getProtocolVersion ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class app/oreshkov/ktmcpx/ModernMetaKeys {
+	public static final field CLIENT_CAPABILITIES Ljava/lang/String;
+	public static final field CLIENT_INFO Ljava/lang/String;
+	public static final field INSTANCE Lapp/oreshkov/ktmcpx/ModernMetaKeys;
+	public static final field LOG_LEVEL Ljava/lang/String;
+	public static final field PROTOCOL_VERSION Ljava/lang/String;
+	public static final field SERVER_INFO Ljava/lang/String;
+}
+
+public final class app/oreshkov/ktmcpx/ModernParamHeaders {
+	public static final field ANNOTATION Ljava/lang/String;
+	public static final field INSTANCE Lapp/oreshkov/ktmcpx/ModernParamHeaders;
+	public final fun encode (Ljava/lang/String;)Ljava/lang/String;
+	public final fun headersFor (Lkotlinx/serialization/json/JsonObject;Lkotlinx/serialization/json/JsonObject;)Ljava/util/Map;
+	public final fun problems (Lkotlinx/serialization/json/JsonObject;)Ljava/util/List;
+}
+
+public final class app/oreshkov/ktmcpx/ModernProtocol {
+	public static final field INSTANCE Lapp/oreshkov/ktmcpx/ModernProtocol;
+	public static final field VERSION Ljava/lang/String;
+	public final fun getSUPPORTED_VERSIONS ()Ljava/util/List;
+}
+
+public abstract interface class app/oreshkov/ktmcpx/ModernReply {
+}
+
+public final class app/oreshkov/ktmcpx/ModernReply$Accepted : app/oreshkov/ktmcpx/ModernReply {
+	public static final field INSTANCE Lapp/oreshkov/ktmcpx/ModernReply$Accepted;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class app/oreshkov/ktmcpx/ModernReply$Response : app/oreshkov/ktmcpx/ModernReply {
+	public fun <init> (Lkotlinx/serialization/json/JsonObject;I)V
+	public final fun getErrorCode ()Ljava/lang/Integer;
+	public final fun getHttpStatus ()I
+	public final fun getMessage ()Lkotlinx/serialization/json/JsonObject;
+	public fun toString ()Ljava/lang/String;
+}
+

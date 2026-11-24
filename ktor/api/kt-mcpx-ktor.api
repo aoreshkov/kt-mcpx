@@ -1,0 +1,8 @@
+public final class app/oreshkov/ktmcpx/ktor/DualEraKt {
+	public static final field DEFAULT_MAX_REQUEST_BODY_SIZE J
+	public static final fun dualEra (Lio/ktor/server/application/Application;Ljava/lang/String;JLkotlin/jvm/functions/Function2;)V
+	public static final fun dualEra (Lio/ktor/server/routing/Route;Ljava/lang/String;JLkotlin/jvm/functions/Function2;)Lio/ktor/server/routing/Route;
+	public static synthetic fun dualEra$default (Lio/ktor/server/application/Application;Ljava/lang/String;JLkotlin/jvm/functions/Function2;ILjava/lang/Object;)V
+	public static synthetic fun dualEra$default (Lio/ktor/server/routing/Route;Ljava/lang/String;JLkotlin/jvm/functions/Function2;ILjava/lang/Object;)Lio/ktor/server/routing/Route;
+}
+

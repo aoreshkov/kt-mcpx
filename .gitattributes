@@ -1,0 +1,19 @@
+# Normalize every text file to LF in the repository and check it out as LF, on every
+# platform. Without this baseline, files committed from Windows land as CRLF and drift
+# silently.
+* text=auto eol=lf
+
+# Shell scripts must use LF on every platform — a CRLF shebang breaks `bash`
+# (e.g. the Claude Code Stop hook in .claude/hooks/). Covered by the rule above, but
+# stated explicitly because the failure it prevents is silent and confusing.
+*.sh text eol=lf
+
+# The Linux Gradle wrapper script runs on the CI Linux runner.
+gradlew text eol=lf
+
+# Windows scripts must keep CRLF.
+*.bat text eol=crlf
+
+# Binary files are never text: no eol conversion, no diffing.
+*.png binary
+*.jar binary

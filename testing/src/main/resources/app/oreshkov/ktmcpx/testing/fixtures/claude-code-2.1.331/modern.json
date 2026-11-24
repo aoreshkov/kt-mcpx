@@ -1,0 +1,325 @@
+[
+  {
+    "seq": 1,
+    "request": {
+      "method": "POST",
+      "path": "/mcp",
+      "headers": {
+        "accept": "application/json, text/event-stream",
+        "accept-encoding": "identity",
+        "connection": "keep-alive",
+        "content-type": "application/json",
+        "mcp-method": "server/discover",
+        "mcp-protocol-version": "2026-07-28",
+        "user-agent": "claude-code/2.1.331 (sdk-cli)"
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": "server-discover-probe-1",
+        "method": "server/discover",
+        "params": {
+          "_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientInfo": {
+              "name": "claude-code",
+              "title": "Claude Code",
+              "version": "2.1.331",
+              "description": "Anthropic's agentic coding tool",
+              "websiteUrl": "https://claude.com/claude-code"
+            },
+            "io.modelcontextprotocol/clientCapabilities": {
+              "roots": {
+                "listChanged": true
+              },
+              "elicitation": {
+                "form": {},
+                "url": {}
+              },
+              "extensions": {
+                "io.modelcontextprotocol/tasks": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": "server-discover-probe-1",
+        "result": {
+          "resultType": "complete",
+          "supportedVersions": [
+            "2026-07-28"
+          ],
+          "capabilities": {
+            "tools": {},
+            "logging": {}
+          },
+          "instructions": "Conformance fixture server for kt-mcpx.",
+          "ttlMs": 60000,
+          "cacheScope": "private",
+          "_meta": {
+            "io.modelcontextprotocol/serverInfo": {
+              "name": "kt-mcpx-fixture",
+              "version": "1.0.0"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "seq": 2,
+    "request": {
+      "method": "POST",
+      "path": "/mcp",
+      "headers": {
+        "accept": "application/json, text/event-stream",
+        "accept-encoding": "identity",
+        "connection": "keep-alive",
+        "content-type": "application/json",
+        "mcp-method": "tools/list",
+        "mcp-protocol-version": "2026-07-28",
+        "user-agent": "claude-code/2.1.331 (sdk-cli)"
+      },
+      "body": {
+        "method": "tools/list",
+        "jsonrpc": "2.0",
+        "id": 0,
+        "params": {
+          "_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientInfo": {
+              "name": "claude-code",
+              "title": "Claude Code",
+              "version": "2.1.331",
+              "description": "Anthropic's agentic coding tool",
+              "websiteUrl": "https://claude.com/claude-code"
+            },
+            "io.modelcontextprotocol/clientCapabilities": {
+              "roots": {
+                "listChanged": true
+              },
+              "elicitation": {
+                "form": {},
+                "url": {}
+              },
+              "extensions": {
+                "io.modelcontextprotocol/tasks": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "result": {
+          "tools": [
+            {
+              "name": "test_simple_text",
+              "inputSchema": {
+                "type": "object"
+              },
+              "description": "Returns a simple text response."
+            },
+            {
+              "name": "test_image_content",
+              "inputSchema": {
+                "type": "object"
+              },
+              "description": "Returns an image."
+            },
+            {
+              "name": "test_audio_content",
+              "inputSchema": {
+                "type": "object"
+              },
+              "description": "Returns audio."
+            },
+            {
+              "name": "test_embedded_resource",
+              "inputSchema": {
+                "type": "object"
+              },
+              "description": "Returns an embedded resource."
+            },
+            {
+              "name": "test_multiple_content_types",
+              "inputSchema": {
+                "type": "object"
+              },
+              "description": "Returns text, an image and a resource."
+            },
+            {
+              "name": "test_error_handling",
+              "inputSchema": {
+                "type": "object"
+              },
+              "description": "Always fails."
+            },
+            {
+              "name": "test_tool_with_progress",
+              "inputSchema": {
+                "type": "object"
+              },
+              "description": "Reports progress 0, 50 and 100 of 100."
+            },
+            {
+              "name": "test_tool_with_logging",
+              "inputSchema": {
+                "type": "object"
+              },
+              "description": "Logs three messages at info level."
+            },
+            {
+              "name": "test_logging_tool",
+              "inputSchema": {
+                "type": "object"
+              },
+              "description": "Logs one message at info level."
+            },
+            {
+              "name": "test_missing_capability",
+              "inputSchema": {
+                "type": "object"
+              },
+              "description": "Asks the client for sampling, which it must have declared."
+            },
+            {
+              "name": "test_sampling",
+              "inputSchema": {
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "description": "The prompt to send to the client's model"
+                  }
+                },
+                "required": [
+                  "prompt"
+                ],
+                "type": "object"
+              },
+              "description": "Asks the client to sample a completion for the prompt."
+            },
+            {
+              "name": "test_elicitation",
+              "inputSchema": {
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "description": "The message to show the user"
+                  }
+                },
+                "required": [
+                  "message"
+                ],
+                "type": "object"
+              },
+              "description": "Asks the client for input."
+            },
+            {
+              "name": "test_streaming_elicitation",
+              "inputSchema": {
+                "type": "object"
+              },
+              "description": "Asks the client for input while the request runs."
+            }
+          ],
+          "resultType": "complete",
+          "ttlMs": 60000,
+          "cacheScope": "private",
+          "_meta": {
+            "io.modelcontextprotocol/serverInfo": {
+              "name": "kt-mcpx-fixture",
+              "version": "1.0.0"
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "seq": 3,
+    "request": {
+      "method": "POST",
+      "path": "/mcp",
+      "headers": {
+        "accept": "application/json, text/event-stream",
+        "accept-encoding": "identity",
+        "connection": "keep-alive",
+        "content-type": "application/json",
+        "mcp-method": "tools/call",
+        "mcp-name": "test_simple_text",
+        "mcp-protocol-version": "2026-07-28",
+        "user-agent": "claude-code/2.1.331 (sdk-cli)"
+      },
+      "body": {
+        "method": "tools/call",
+        "params": {
+          "name": "test_simple_text",
+          "arguments": {},
+          "_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientInfo": {
+              "name": "claude-code",
+              "title": "Claude Code",
+              "version": "2.1.331",
+              "description": "Anthropic's agentic coding tool",
+              "websiteUrl": "https://claude.com/claude-code"
+            },
+            "io.modelcontextprotocol/clientCapabilities": {
+              "roots": {
+                "listChanged": true
+              },
+              "elicitation": {
+                "form": {},
+                "url": {}
+              }
+            },
+            "claudecode/toolUseId": "toolu_SCRUBBED",
+            "progressToken": 1
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 1
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+          "content": [
+            {
+              "text": "This is a simple text response for testing.",
+              "type": "text"
+            }
+          ],
+          "resultType": "complete",
+          "_meta": {
+            "io.modelcontextprotocol/serverInfo": {
+              "name": "kt-mcpx-fixture",
+              "version": "1.0.0"
+            }
+          }
+        }
+      }
+    }
+  }
+]

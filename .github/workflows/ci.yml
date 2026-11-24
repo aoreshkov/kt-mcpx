@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: 25
+
+      # Includes Gradle wrapper validation and build caching.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          validate-wrappers: true
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      # Tests, and the ABI check of the published modules against their committed api/ dumps.
+      - name: Build, test and check the public API
+        run: ./gradlew build
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports-${{ matrix.os }}
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+          retention-days: 7
+
+  # The official MCP conformance suite against the fixture server, which registers the suite's tools
+  # with plain SDK APIs and serves both eras on one endpoint: the bridge for 2026-07-28, the SDK route
+  # for 2025-11-25. Scenarios for features not implemented yet are listed, each with its reason, in
+  # .github/conformance/baseline-<revision>.yml.
+  conformance:
+    name: MCP conformance (both eras, one endpoint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Build the fixture server
+        run: ./gradlew :fixture-server:installDist
+
+      # Pinned by package-lock.json and installed without lifecycle scripts, rather than a floating
+      # `npx`. ubuntu-latest ships Node, so no setup-node step is needed.
+      - name: Install the conformance suite
+        run: npm ci --prefix .github/conformance --ignore-scripts --no-audit --no-fund
+
+      - name: Start the fixture server
+        run: |
+          fixture-server/build/install/fixture-server/bin/fixture-server 3000 > "$RUNNER_TEMP/server.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            curl -s -o /dev/null http://127.0.0.1:3000/mcp && exit 0
+            sleep 1
+          done
+          echo "the fixture server did not start listening"; cat "$RUNNER_TEMP/server.log"; exit 1
+
+      # Each run fails on a failing scenario that is not in its baseline, and on a baseline entry that
+      # now passes, so the baselines cannot go stale.
+      - name: 2026-07-28 (the bridge)
+        run: >
+          .github/conformance/node_modules/.bin/conformance server
+          --url http://127.0.0.1:3000/mcp
+          --requirements 2026-07-28
+          --expected-failures .github/conformance/baseline-2026-07-28.yml
+          --output-dir "$RUNNER_TEMP/conformance/2026-07-28"
+
+      - name: 2025-11-25 (the SDK route, untouched)
+        if: success() || failure()
+        run: >
+          .github/conformance/node_modules/.bin/conformance server
+          --url http://127.0.0.1:3000/mcp
+          --requirements 2025-11-25
+          --expected-failures .github/conformance/baseline-2025-11-25.yml
+          --output-dir "$RUNNER_TEMP/conformance/2025-11-25"
+
+      - name: Upload conformance results
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: conformance-results
+          path: |
+            ${{ runner.temp }}/conformance/
+            ${{ runner.temp }}/server.log
+          retention-days: 7

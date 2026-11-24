@@ -1,0 +1,26 @@
+# Expected failures of `conformance server --requirements 2026-07-28` against the fixture server's
+# modern route (kt-mcpx's bridge in front of an SDK 0.16.0 server).
+#
+# A failing scenario that is not listed here fails CI, and so does a listed one that starts passing
+# ("stale baseline"), so the list shrinks as features land. Every entry below is a feature that is
+# not implemented yet, not a known defect of what is implemented.
+server:
+  # Not implemented yet, warnings only: the fixture tools need MRTR to re-request or validate inputResponses.
+  - input-required-result-missing-input-response
+  - input-required-result-validate-input
+  # Not implemented yet: MRTR (input_required results, requestState, inputResponses replay).
+  - input-required-result-basic-elicitation
+  - input-required-result-basic-sampling
+  - input-required-result-basic-list-roots
+  - input-required-result-request-state
+  - input-required-result-multiple-input-requests
+  - input-required-result-multi-round
+  - input-required-result-non-tool-request
+  - input-required-result-result-type
+  - input-required-result-tampered-state
+  - input-required-result-capability-check
+
+# Run but never scored, so not listed (the baseline check ignores them):
+# - tasks-* (extension): the io.modelcontextprotocol/tasks extension is not implemented yet.
+# - json-schema-2020-12 (pending): SDK 0.16.0's ToolSchema has no additionalProperties, allOf/anyOf
+#   or if/then/else, so an SDK-registered tool cannot carry the scenario's input schema.

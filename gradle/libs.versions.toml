@@ -1,0 +1,33 @@
+[versions]
+# The JDK every module compiles with (Gradle toolchain, read by the build-logic convention plugins).
+jdk = "25"
+kotlin = "2.4.21"
+# Renders the KDoc that becomes each published module's -javadoc jar (Maven Central requires one).
+dokka = "2.3.0"
+
+# Each library minor version is built against exactly one SDK minor version (README matrix).
+mcpKotlinSdk = "0.16.0"
+ktor = "3.6.1"
+kotlinxCoroutines = "1.11.0"
+kotlinxSerialization = "1.13.0"
+# What kotlin-sdk-core 0.16.0 brings; declared because kt-mcpx-stdio takes its Source and Sink.
+kotlinxIo = "0.9.1"
+# What kotlin-sdk-core 0.16.0 brings; the fixture server silences its stdout banner in --stdio mode.
+kotlinLogging = "8.0.4"
+
+[libraries]
+# Build (gradle-plugin classpath for build-logic convention plugins)
+kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
+dokka-gradle-plugin = { module = "org.jetbrains.dokka:dokka-gradle-plugin", version.ref = "dokka" }
+
+mcp-server = { module = "io.modelcontextprotocol:kotlin-sdk-server", version.ref = "mcpKotlinSdk" }
+mcp-client = { module = "io.modelcontextprotocol:kotlin-sdk-client", version.ref = "mcpKotlinSdk" }
+ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
+ktor-server-cio = { module = "io.ktor:ktor-server-cio", version.ref = "ktor" }
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-server-test-host ={ module = "io.ktor:ktor-server-test-host", version.ref = "ktor" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+kotlinx-io-core = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version.ref = "kotlinxIo" }
+kotlin-logging = { module = "io.github.oshai:kotlin-logging", version.ref = "kotlinLogging" }
