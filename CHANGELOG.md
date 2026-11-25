@@ -8,7 +8,7 @@ API incompatibly, and each minor version is built against exactly one Kotlin SDK
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-11-24
+## [0.1.0] - 2026-11-26
 
 First release, built against Kotlin SDK 0.16.
 
