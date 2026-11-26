@@ -94,9 +94,9 @@ class ResourcesAndPromptsTest {
     }
 
     @Test
-    fun `discover drops listChanged and subscribe until subscriptions exist`() = runBlocking {
+    fun `discover keeps listChanged and subscribe, which subscriptions listen serves`() = runBlocking {
         val capabilities = send(body("server/discover")).result["capabilities"]!!.jsonObject
-        assertEquals(emptySet(), capabilities["resources"]!!.jsonObject.keys)
-        assertEquals(emptySet(), capabilities["prompts"]!!.jsonObject.keys)
+        assertEquals(setOf("listChanged", "subscribe"), capabilities["resources"]!!.jsonObject.keys)
+        assertEquals(setOf("listChanged"), capabilities["prompts"]!!.jsonObject.keys)
     }
 }

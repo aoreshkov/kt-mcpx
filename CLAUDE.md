@@ -19,6 +19,9 @@ Analysis and plan documents live in `docs/`, which is private and git-ignored.
     `CapabilityMessagesTest`: an SDK bump that rewords them fails there. SEP-2243 custom headers:
     `ModernParamHeaders` (public: annotation problems, client-side headers and encoding) and
     `internal/ParamHeaders.kt` (the `tools/call` check against `server.tools[name]`'s schema).
+    MRTR: `internal/InputRequests.kt` (stable input keys, the HMAC-signed `requestState`) and the `Ask`
+    decision in `SyntheticSession`, which collects questions until `inputRequestWindow` passes quietly.
+    `subscriptions/listen`: `internal/Subscriptions.kt`, one long-lived listener session per bridge.
   - `ktor/` (`:kt-mcpx-ktor`): `Route.dualEra(path) { bridge }`, with the header-only selector that routes
     modern POSTs (`ModernRequestSelector`) and lazy SSE.
   - `stdio/` (`:kt-mcpx-stdio`): `serveDualEraStdio(server, bridge) { legacySession -> }` in place of
@@ -28,8 +31,9 @@ Analysis and plan documents live in `docs/`, which is private and git-ignored.
   - `testing/` (`:kt-mcpx-testing`): `ModernTestClient`, the `ModernContract` kit, and `CapturedTraffic`.
     The scrubbed client captures are under `src/main/resources/.../testing/fixtures/`.
 - `fixture-server/`: the conformance fixture server (the suite's `test_*` tools, `test_custom_headers`
-  with `x-mcp-header` annotations, prompts, resources, a template and a per-session completion handler,
-  registered with SDK APIs). It serves both eras on
+  with `x-mcp-header` annotations, the `test_input_required_result_*` tools and prompt asking through
+  plain SDK calls, the `test_trigger_*_change` tools, prompts, resources, a template and a per-session
+  completion handler, registered with SDK APIs). It serves both eras on
   `/mcp`. Never published. `./gradlew :fixture-server:installDist`, then
   `fixture-server/build/install/fixture-server/bin/fixture-server [port]` (default 3000), or
   `... fixture-server --stdio [trace-file]` for both eras on stdio (the trace gets every stdin line).

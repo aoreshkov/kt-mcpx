@@ -10,14 +10,17 @@ import io.modelcontextprotocol.kotlin.sdk.types.RequestId
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlin.time.Duration
 
 /** The revision the synthetic `initialize` asks for: the newest one SDK 0.16.0 serves. */
 internal const val LEGACY_PROTOCOL_VERSION: String = "2025-11-25"
@@ -34,6 +37,12 @@ internal sealed interface SyntheticOutcome {
 
     /** The bridge ended the call early with this error (code, message, data), e.g. -32021. */
     class Aborted(val error: JsonObject) : SyntheticOutcome
+
+    /**
+     * The handler is waiting on questions only the client can answer: the 2026-07-28 input requests,
+     * by key, in the order they were asked.
+     */
+    class InputRequired(val inputRequests: Map<String, JsonObject>) : SyntheticOutcome
 }
 
 /** What the bridge does with a request the server sends while a call runs. */
@@ -46,6 +55,13 @@ internal sealed interface ServerRequestDecision {
 
     /** End the whole call with this error object. */
     class Abort(val error: JsonObject) : ServerRequestDecision
+
+    /**
+     * Leave the request unanswered and pass it to the client as the input request [inputRequest] under
+     * [key]. The call ends with [SyntheticOutcome.InputRequired] once no further question has arrived
+     * for the session's input window.
+     */
+    class Ask(val key: String, val inputRequest: JsonObject) : ServerRequestDecision
 }
 
 /**
@@ -60,7 +76,13 @@ internal class SyntheticSession(
     private val server: Server,
     private val clientCapabilities: JsonObject,
     private val clientInfo: JsonObject?,
+    /** How long to wait for further questions after one the client must answer (see [ServerRequestDecision.Ask]). */
+    private val inputWindow: Duration = Duration.ZERO,
 ) {
+    private val abort = CompletableDeferred<JsonObject>()
+    private val asked = LinkedHashMap<String, JsonObject>()
+    private val askedSignal = Channel<Unit>(Channel.CONFLATED)
+
     /**
      * Opens the session, initializes it, and passes the `initialize` result to [block] together with a
      * function that forwards one request through it.
@@ -70,25 +92,20 @@ internal class SyntheticSession(
         onServerRequest: suspend (JsonObject) -> ServerRequestDecision,
         block: suspend (initializeResult: JsonObject, forward: suspend (JsonObject) -> SyntheticOutcome) -> T,
     ): T {
-        val abort = CompletableDeferred<JsonObject>()
         val transport = InMemoryServerTransport(
             onNotification = { onNotification(it.toJsonObject()) },
-            onServerRequest = { request -> decide(request, onServerRequest(request.toJsonObject()), abort) },
+            onServerRequest = { request -> decide(request, onServerRequest(request.toJsonObject())) },
         )
         val session = server.createSession(transport)
         try {
             val initializeResult = transport.initialize()
-            return block(initializeResult) { request -> transport.forward(request, abort) }
+            return block(initializeResult) { request -> transport.forward(request) }
         } finally {
             withContext(NonCancellable) { session.close() }
         }
     }
 
-    private fun decide(
-        request: JSONRPCRequest,
-        decision: ServerRequestDecision,
-        abort: CompletableDeferred<JsonObject>,
-    ): JSONRPCMessage? = when (decision) {
+    private fun decide(request: JSONRPCRequest, decision: ServerRequestDecision): JSONRPCMessage? = when (decision) {
         is ServerRequestDecision.Answer ->
             rpcResult(McpIdJson.encode(request.id), decision.result).toRpcMessage()
         is ServerRequestDecision.Refuse ->
@@ -97,33 +114,35 @@ internal class SyntheticSession(
             abort.complete(decision.error)
             null
         }
-    }
-
-    private suspend fun InMemoryServerTransport.initialize(): JsonObject {
-        val params = buildJsonObject {
-            put("protocolVersion", LEGACY_PROTOCOL_VERSION)
-            put("capabilities", clientCapabilities)
-            put("clientInfo", clientInfo ?: SYNTHETIC_CLIENT_INFO)
+        is ServerRequestDecision.Ask -> {
+            synchronized(asked) { asked[decision.key] = decision.inputRequest }
+            askedSignal.trySend(Unit)
+            null
         }
-        val answer = exchange(JSONRPCRequest(INITIALIZE_ID, Method.Defined.Initialize.value, params))
-        check(answer is JSONRPCResponse) { "The SDK refused the synthetic initialize: ${answer.toJsonObject()}" }
-        notify(JSONRPCNotification(Method.Defined.NotificationsInitialized.value))
-        return answer.toJsonObject().obj("result") ?: EMPTY_OBJECT
     }
 
-    private suspend fun InMemoryServerTransport.forward(
-        request: JsonObject,
-        abort: CompletableDeferred<JsonObject>,
-    ): SyntheticOutcome = coroutineScope {
+    private suspend fun InMemoryServerTransport.initialize(): JsonObject =
+        initializeSession(clientCapabilities, clientInfo ?: SYNTHETIC_CLIENT_INFO)
+
+    private suspend fun InMemoryServerTransport.forward(request: JsonObject): SyntheticOutcome = coroutineScope {
         val rpcRequest = request.toRpcMessage() as JSONRPCRequest
         val reply = async { exchange(rpcRequest) }
+        // Settles once a question has arrived and no other one followed within the window.
+        val questionsSettled = async {
+            askedSignal.receive()
+            do {
+                val another = withTimeoutOrNull(inputWindow) { askedSignal.receive() }
+            } while (another != null)
+        }
         val outcome = select {
             reply.onAwait { message ->
                 SyntheticOutcome.Answered(message.toJsonObject())
             }
             abort.onAwait { error -> SyntheticOutcome.Aborted(error) }
+            questionsSettled.onAwait { SyntheticOutcome.InputRequired(synchronized(asked) { LinkedHashMap(asked) }) }
         }
         reply.cancel()
+        questionsSettled.cancel()
         outcome
     }
 
@@ -133,6 +152,22 @@ internal class SyntheticSession(
             put("version", "0")
         }
     }
+}
+
+/**
+ * Runs the legacy handshake on a fresh session: `initialize` at [LEGACY_PROTOCOL_VERSION] with
+ * [capabilities] and [clientInfo], then `notifications/initialized`. Returns the `initialize` result.
+ */
+internal suspend fun InMemoryServerTransport.initializeSession(capabilities: JsonObject, clientInfo: JsonObject): JsonObject {
+    val params = buildJsonObject {
+        put("protocolVersion", LEGACY_PROTOCOL_VERSION)
+        put("capabilities", capabilities)
+        put("clientInfo", clientInfo)
+    }
+    val answer = exchange(JSONRPCRequest(INITIALIZE_ID, Method.Defined.Initialize.value, params))
+    check(answer is JSONRPCResponse) { "The SDK refused the synthetic initialize: ${answer.toJsonObject()}" }
+    notify(JSONRPCNotification(Method.Defined.NotificationsInitialized.value))
+    return answer.toJsonObject().obj("result") ?: EMPTY_OBJECT
 }
 
 /** Encodes an SDK [RequestId] back to its JSON form. */

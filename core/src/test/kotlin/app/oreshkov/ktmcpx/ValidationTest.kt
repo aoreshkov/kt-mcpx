@@ -99,7 +99,7 @@ class ValidationTest {
 
     @Test
     fun `removed and unknown methods are -32601, HTTP 404`() {
-        for (method in listOf("initialize", "ping", "logging/setLevel", "resources/subscribe", "resources/unsubscribe", "tasks/list", "tasks/result", "subscriptions/listen", "unknown/method")) {
+        for (method in listOf("initialize", "ping", "logging/setLevel", "resources/subscribe", "resources/unsubscribe", "tasks/list", "tasks/result", "unknown/method")) {
             val reply = handle(body(method, id = JsonPrimitive("id-$method")))
             assertRejected(reply, ModernErrorCodes.METHOD_NOT_FOUND, 404)
             assertEquals(JsonPrimitive("id-$method"), reply.message["id"])

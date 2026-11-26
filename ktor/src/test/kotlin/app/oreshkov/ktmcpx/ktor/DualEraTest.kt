@@ -13,6 +13,10 @@ import io.ktor.server.routing.routing
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import io.modelcontextprotocol.kotlin.sdk.server.mcpStatelessStreamableHttp
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
@@ -23,6 +27,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 private val LOCALHOST = mapOf(HttpHeaders.Host to "localhost")
 
@@ -140,6 +145,44 @@ class DualEraTest {
         val missing = client.send("tools/call", params, headers = lowercase - "mcp-param-verbose")
         assertEquals(400, missing.status)
         assertEquals(ModernErrorCodes.HEADER_MISMATCH, missing.errorCode)
+    }
+
+    @Test
+    fun `subscriptions listen streams over SSE until the bridge closes it`() = testApplication {
+        val server = fixtureServer()
+        val bridge = ModernBridge(server)
+        application { routing { dualEra("/mcp") { bridge } } }
+        val client = modernClient()
+        val filter = buildJsonObject { put("notifications", buildJsonObject { put("toolsListChanged", true) }) }
+
+        coroutineScope {
+            val listening = async { client.send("subscriptions/listen", filter) }
+            // The listener session exists once the stream is subscribed.
+            withTimeout(5.seconds) { while (server.sessions.isEmpty()) delay(10) }
+            client.callTool("test_trigger_tool_change")
+            withTimeout(5.seconds) { while (server.tools.keys.none { it == "test_dynamic_tool" }) delay(10) }
+            delay(200)
+            bridge.close()
+            val response = withTimeout(5.seconds) { listening.await() }
+
+            assertTrue(response.isEventStream, response.toString())
+            assertEquals(
+                listOf("notifications/subscriptions/acknowledged", "notifications/tools/list_changed"),
+                response.notifications.map { it["method"]!!.jsonPrimitive.content },
+            )
+            assertEquals("complete", response.result!!["resultType"]!!.jsonPrimitive.content)
+        }
+    }
+
+    @Test
+    fun `subscriptions listen without SSE in Accept is 406`() = testApplication {
+        application { fixtureModule() }
+        val filter = buildJsonObject { put("notifications", buildJsonObject { put("toolsListChanged", true) }) }
+
+        val response = modernClient().send("subscriptions/listen", filter, headers = mapOf(HttpHeaders.Accept to "application/json"))
+
+        assertEquals(406, response.status)
+        assertEquals(ModernErrorCodes.INVALID_REQUEST, response.errorCode)
     }
 
     @Test

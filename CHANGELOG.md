@@ -8,6 +8,34 @@ API incompatibly, and each minor version is built against exactly one Kotlin SDK
 
 ## [Unreleased]
 
+### Added
+
+- `kt-mcpx-core`: MRTR (SEP-2322). On `tools/call`, `prompts/get` and `resources/read`, a handler that
+  asks the client for something (`createElicitation`, `createMessage`, `listRoots`) now gets a
+  `resultType: "input_required"` answer instead of an error. On the retry the bridge runs the handler
+  again and answers each question from `inputResponses`; answers from earlier rounds come back in an
+  HMAC-signed `requestState`, bound to the request and valid for `requestStateTtl` (default 30
+  minutes). Questions asked concurrently within `inputRequestWindow` (default 50 ms) share one result.
+  Input request keys stay stable across rounds, and a handler can name one with
+  `_meta[ModernInputRequests.KEY_META]`. A URL elicitation loses its `elicitationId`, and the SDK's
+  `UrlElicitationRequiredException` (-32042) becomes an `input_required` result too. Handlers must be
+  idempotent up to the point where they ask. Set `requestStateSecret` on every instance behind a load
+  balancer.
+- `kt-mcpx-core`: `subscriptions/listen` (SEP-2575). The SDK's `list_changed` and `resources/updated`
+  notifications reach every listen stream whose filter asks for them, tagged with the subscription
+  id, after a `notifications/subscriptions/acknowledged` that names what the server can honour. One
+  long-lived SDK session per bridge, open only while a stream is, receives them. `server/discover`
+  advertises `listChanged` and `subscribe` again. `ModernBridge.close()` ends open streams with their
+  final result.
+- `kt-mcpx-ktor`: `subscriptions/listen` is served as an SSE stream; a request for it without
+  `text/event-stream` in `Accept` gets 406.
+
+### Fixed
+
+- `kt-mcpx-stdio`: the legacy SDK session no longer writes `list_changed` broadcasts to stdout before a
+  legacy client has sent `initialize`, so a modern-only client never sees notifications it did not
+  subscribe to.
+
 ## [0.1.0] - 2026-11-26
 
 First release, built against Kotlin SDK 0.16.
