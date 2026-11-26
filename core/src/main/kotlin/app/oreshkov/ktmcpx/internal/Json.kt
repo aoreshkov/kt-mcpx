@@ -46,6 +46,9 @@ internal fun rpcError(id: JsonElement?, code: Int, message: String, data: JsonEl
     )
 }
 
+/** The HTTP status of a request the bridge refuses because it is at a concurrency limit. */
+internal const val HTTP_SERVICE_UNAVAILABLE: Int = 503
+
 /** The HTTP status the 2026-07-28 Streamable HTTP binding pairs with a JSON-RPC error [code]. */
 internal fun httpStatusFor(code: Int?): Int = when (code) {
     null -> 200

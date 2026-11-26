@@ -171,6 +171,8 @@ internal class SubscriptionHub(private val server: Server) {
 
     private suspend fun start(): Open {
         val transport = InMemoryServerTransport(
+            // No request set a log level on a listen stream, so no log message may reach one.
+            ownRequestId = null,
             onNotification = { dispatch(it.toJsonObject()) },
             onServerRequest = { request ->
                 rpcError(McpIdJson.encode(request.id), ModernErrorCodes.METHOD_NOT_FOUND, "The kt-mcpx listener session answers no requests")

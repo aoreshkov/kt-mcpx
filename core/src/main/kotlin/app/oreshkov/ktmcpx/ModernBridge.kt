@@ -3,7 +3,7 @@ package app.oreshkov.ktmcpx
 import app.oreshkov.ktmcpx.internal.DISCOVER_METHOD
 import app.oreshkov.ktmcpx.internal.ELICITATION_METHOD
 import app.oreshkov.ktmcpx.internal.EMPTY_OBJECT
-import app.oreshkov.ktmcpx.internal.FORWARDED_ID
+import app.oreshkov.ktmcpx.internal.HTTP_SERVICE_UNAVAILABLE
 import app.oreshkov.ktmcpx.internal.INPUT_REQUIRED_METHODS
 import app.oreshkov.ktmcpx.internal.INPUT_RESPONSES
 import app.oreshkov.ktmcpx.internal.InputKeys
@@ -40,6 +40,7 @@ import app.oreshkov.ktmcpx.internal.with
 import app.oreshkov.ktmcpx.internal.without
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -76,6 +77,8 @@ public class ModernBridge(
     private val config = Config().apply(configure)
     private val requestStates = RequestStateCodec(config.requestStateSecret, config.requestStateTtl.inWholeMilliseconds)
     private val subscriptions = SubscriptionHub(server)
+    private val requestPermits = Semaphore(config.maxConcurrentRequests)
+    private val listenPermits = Semaphore(config.maxListenStreams)
 
     /** Settings of a [ModernBridge]. */
     public class Config internal constructor() {
@@ -107,6 +110,27 @@ public class ModernBridge(
         public var requestStateTtl: Duration = 30.minutes
             set(value) {
                 require(value.isPositive() && value.isFinite()) { "The requestState TTL must be finite and positive: $value" }
+                field = value
+            }
+
+        /**
+         * How many modern requests may run at once, `subscriptions/listen` streams aside. One more is
+         * answered at once with -32603 and HTTP 503 (with `Retry-After` on Ktor), before any SDK session
+         * is opened. `server/discover` counts, since it opens one.
+         */
+        public var maxConcurrentRequests: Int = 1_000
+            set(value) {
+                require(value > 0) { "The concurrent request limit must be positive: $value" }
+                field = value
+            }
+
+        /**
+         * How many `subscriptions/listen` streams may be open at once. They have their own limit so that
+         * long-lived streams never use up [maxConcurrentRequests]; one more is refused the same way.
+         */
+        public var maxListenStreams: Int = 100
+            set(value) {
+                require(value > 0) { "The listen stream limit must be positive: $value" }
                 field = value
             }
 
@@ -148,9 +172,27 @@ public class ModernBridge(
     ): ModernReply = when (val validation = validate(message, headers, ::toolInputSchema)) {
         is Validation.Notification -> ModernReply.Accepted
         is Validation.Rejected -> response(validation.message)
-        is Validation.Valid ->
-            if (validation.request.method == LISTEN_METHOD) listen(validation.request, onNotification) else serve(validation.request, onNotification)
+        is Validation.Valid -> {
+            val request = validation.request
+            val listening = request.method == LISTEN_METHOD
+            val permits = if (listening) listenPermits else requestPermits
+            if (!permits.tryAcquire()) {
+                overloaded(request)
+            } else {
+                try {
+                    if (listening) listen(request, onNotification) else serve(request, onNotification)
+                } finally {
+                    permits.release()
+                }
+            }
+        }
     }
+
+    /** -32603 with HTTP 503: the spec defines no overload code, and the SDK answers its own session limit so. */
+    private fun overloaded(request: ValidRequest): ModernReply.Response = ModernReply.Response(
+        rpcError(request.id, ModernErrorCodes.INTERNAL_ERROR, "Too many requests in flight"),
+        HTTP_SERVICE_UNAVAILABLE,
+    )
 
     /**
      * Ends every open `subscriptions/listen` stream with its final result, so each [handle] call serving
@@ -231,7 +273,10 @@ public class ModernBridge(
         return RequestStateCodec.Opened.Ok(sealed + request.inputResponses)
     }
 
-    /** The request as the SDK session sees it: the bridge's id, `_meta` without the modern keys, no MRTR fields. */
+    /**
+     * The request as the SDK session sees it: `_meta` without the modern keys, no MRTR fields. The session
+     * forwards it under its own id; the client's id is restored in the answer.
+     */
     private fun forwardedRequest(request: ValidRequest): JsonObject {
         val plain = request.params.without(INPUT_RESPONSES, REQUEST_STATE)
         val params = if (request.meta.passThrough.isEmpty()) {
@@ -241,7 +286,7 @@ public class ModernBridge(
         }
         return buildJsonObject {
             put("jsonrpc", "2.0")
-            put("id", FORWARDED_ID)
+            put("id", request.id)
             put("method", request.method)
             put("params", params)
         }

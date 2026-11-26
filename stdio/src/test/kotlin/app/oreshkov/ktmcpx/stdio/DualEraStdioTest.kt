@@ -5,13 +5,18 @@ import app.oreshkov.ktmcpx.ModernErrorCodes
 import app.oreshkov.ktmcpx.ModernMetaKeys
 import app.oreshkov.ktmcpx.ModernProtocol
 import app.oreshkov.ktmcpx.fixture.fixtureServer
+import app.oreshkov.ktmcpx.isKtMcpxSession
 import io.modelcontextprotocol.kotlin.sdk.client.Client
 import io.modelcontextprotocol.kotlin.sdk.client.StdioClientTransport
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
 import io.modelcontextprotocol.kotlin.sdk.server.ServerSession
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
+import io.modelcontextprotocol.kotlin.sdk.types.EmptyJsonObject
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
+import io.modelcontextprotocol.kotlin.sdk.types.LoggingLevel
+import io.modelcontextprotocol.kotlin.sdk.types.LoggingMessageNotification
+import io.modelcontextprotocol.kotlin.sdk.types.LoggingMessageNotificationParams
 import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.coroutines.CompletableDeferred
@@ -44,6 +49,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import java.nio.channels.Channels
 import java.nio.channels.Pipe
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -207,6 +213,7 @@ class DualEraStdioTest {
             send(modern("M1", "tools/list"))
             responseTo("M1")
             assertEquals(setOf(configured.await().sessionId), server.sessions.keys, "only the legacy session is open")
+            assertFalse(configured.await().isKtMcpxSession, "the legacy session is the adopter's")
         }
         assertTrue(server.sessions.isEmpty(), "sessions left after EOF: ${server.sessions.keys}")
     }
@@ -249,6 +256,43 @@ class DualEraStdioTest {
     }
 
     @Test
+    fun `a modern-only client sees only its responses when a handler broadcasts to every session`() = serve(
+        broadcastingServer(),
+    ) {
+        // No legacy initialize: the legacy session must stay silent, and the request set no log level.
+        // The broadcast happens before the handler returns, so anything it wrote would come first.
+        send(modern("B1", "tools/call", buildJsonObject { put("name", "broadcast") }))
+        val first = next()
+        assertEquals(JsonPrimitive("B1"), first["id"], "nothing before the response")
+        assertEquals("broadcast", contentText(first.result))
+        send(modern("B2", "tools/list"))
+        assertEquals(JsonPrimitive("B2"), next()["id"], "nothing between the responses")
+    }
+
+    @Test
+    fun `a request over the concurrency limit gets -32603 on stdio`() {
+        val entered = CompletableDeferred<Unit>()
+        val gate = CompletableDeferred<Unit>()
+        val server = Server(Implementation("limited", "1"), ServerOptions(ServerCapabilities(tools = ServerCapabilities.Tools()))).apply {
+            addTool("block", "Waits for the gate.") {
+                entered.complete(Unit)
+                gate.await()
+                CallToolResult(listOf(TextContent("done")))
+            }
+        }
+        serve(server, bridgeConfig = { maxConcurrentRequests = 1 }) {
+            send(modern("C1", "tools/call", buildJsonObject { put("name", "block") }))
+            entered.await()
+            send(modern("C2", "tools/list"))
+            val refused = responseTo("C2")
+            assertEquals(ModernErrorCodes.INTERNAL_ERROR, refused.errorCode)
+            assertEquals("Too many requests in flight", refused["error"]!!.jsonObject["message"]!!.jsonPrimitive.content)
+            gate.complete(Unit)
+            assertEquals("done", contentText(responseTo("C1").result))
+        }
+    }
+
+    @Test
     fun `a handler's result reaches a modern client over a server it did not configure for stdio`() = serve(
         Server(Implementation("plain", "1"), ServerOptions(ServerCapabilities(tools = ServerCapabilities.Tools()))).apply {
             addTool("hello", "Says hello.") { CallToolResult(listOf(TextContent("hello"))) }
@@ -259,6 +303,37 @@ class DualEraStdioTest {
         assertEquals("hello", contentText(result))
         assertFalse((result["isError"] as? JsonPrimitive)?.content == "true")
     }
+}
+
+/**
+ * A server whose `broadcast` tool does what an adopter's log forwarder does: it sends a log message and a
+ * resource list change to every session, skipping none.
+ */
+private fun broadcastingServer(): Server {
+    val server = Server(
+        Implementation("broadcasting", "1"),
+        ServerOptions(
+            ServerCapabilities(
+                tools = ServerCapabilities.Tools(),
+                resources = ServerCapabilities.Resources(listChanged = true),
+                logging = EmptyJsonObject,
+            ),
+        ),
+    )
+    server.addTool("broadcast", "Broadcasts a log and a resource list change.") {
+        for (session in server.sessions.values) {
+            try {
+                session.sendLoggingMessage(LoggingMessageNotification(LoggingMessageNotificationParams(LoggingLevel.Info, JsonPrimitive("hello"))))
+                session.sendResourceListChanged()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // A session that closed after the snapshot.
+            }
+        }
+        CallToolResult(listOf(TextContent("broadcast")))
+    }
+    return server
 }
 
 /** Two in-memory pipes standing in for the stdin and stdout of a server process. */
@@ -306,6 +381,7 @@ private class StdioSession(private val pipes: Pipes, private val received: Chann
 private fun serve(
     server: Server,
     configure: suspend (ServerSession) -> Unit = {},
+    bridgeConfig: ModernBridge.Config.() -> Unit = {},
     block: suspend StdioSession.() -> Unit,
 ) = runBlocking {
     val pipes = Pipes()
@@ -315,7 +391,7 @@ private fun serve(
         withTimeout(10.seconds) {
             coroutineScope {
                 val serving = launch(Dispatchers.IO) {
-                    serveDualEraStdio(server, ModernBridge(server), pipes.serverIn, pipes.serverOut, configure)
+                    serveDualEraStdio(server, ModernBridge(server, bridgeConfig), pipes.serverIn, pipes.serverOut, configure)
                 }
                 val reader = readLines(pipes, received)
                 session.block()
