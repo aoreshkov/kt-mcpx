@@ -18,9 +18,11 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 /** The revision the synthetic `initialize` asks for: the newest one SDK 0.16.0 serves. */
 internal const val LEGACY_PROTOCOL_VERSION: String = "2025-11-25"
@@ -92,16 +94,42 @@ internal class SyntheticSession(
         onServerRequest: suspend (JsonObject) -> ServerRequestDecision,
         block: suspend (initializeResult: JsonObject, forward: suspend (JsonObject) -> SyntheticOutcome) -> T,
     ): T {
+        val listChanged = Channel<Unit>(Channel.CONFLATED)
         val transport = InMemoryServerTransport(
-            onNotification = { onNotification(it.toJsonObject()) },
+            onNotification = {
+                if (it.method.endsWith(LIST_CHANGED_SUFFIX)) listChanged.trySend(Unit)
+                onNotification(it.toJsonObject())
+            },
             onServerRequest = { request -> decide(request, onServerRequest(request.toJsonObject())) },
         )
+        val registries = Registries(server)
         val session = server.createSession(transport)
+        var capabilities: JsonObject? = null
         try {
             val initializeResult = transport.initialize()
+            capabilities = initializeResult.obj("capabilities")
             return block(initializeResult) { request -> transport.forward(request) }
         } finally {
-            withContext(NonCancellable) { session.close() }
+            withContext(NonCancellable) {
+                if (registries.changedWithNotice(server, capabilities)) awaitListChanged(listChanged)
+                session.close()
+            }
+        }
+    }
+
+    /**
+     * Works around an SDK 0.16.0 race: closing a session clears its connection before it cancels the
+     * session's notification job, so a `list_changed` being delivered at that moment throws
+     * "Not connected" as an uncaught exception. A registry change during the call starts such a delivery
+     * to this very session, so the session stays open until the notification has arrived and no further
+     * one followed for [LIST_CHANGED_QUIET], or until [LIST_CHANGED_WAIT] passes.
+     */
+    private suspend fun awaitListChanged(listChanged: Channel<Unit>) {
+        withTimeoutOrNull(LIST_CHANGED_WAIT) {
+            listChanged.receive()
+            do {
+                val another = withTimeoutOrNull(LIST_CHANGED_QUIET) { listChanged.receive() }
+            } while (another != null)
         }
     }
 
@@ -151,6 +179,33 @@ internal class SyntheticSession(
             put("name", "kt-mcpx-synthetic")
             put("version", "0")
         }
+
+        const val LIST_CHANGED_SUFFIX = "/list_changed"
+        val LIST_CHANGED_WAIT: Duration = 500.milliseconds
+        val LIST_CHANGED_QUIET: Duration = 50.milliseconds
+    }
+}
+
+/**
+ * The server's feature registries at one moment. The SDK hands out its persistent maps, so every change
+ * makes a new instance; resource templates come as a fresh list and are compared by value.
+ */
+internal class Registries(server: Server) {
+    private val tools = server.tools
+    private val prompts = server.prompts
+    private val resources = server.resources
+    private val resourceTemplates = server.resourceTemplates
+
+    /**
+     * Whether [server] changed a registry since this snapshot that, according to the session's
+     * [capabilities], it announces with a `list_changed` to every session.
+     */
+    fun changedWithNotice(server: Server, capabilities: JsonObject?): Boolean {
+        fun announces(kind: String) =
+            (capabilities?.obj(kind)?.get("listChanged") as? JsonPrimitive)?.booleanOrNull == true
+        return (announces("tools") && server.tools !== tools) ||
+            (announces("prompts") && server.prompts !== prompts) ||
+            (announces("resources") && (server.resources !== resources || server.resourceTemplates != resourceTemplates))
     }
 }
 
