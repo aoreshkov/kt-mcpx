@@ -35,6 +35,11 @@ API incompatibly, and each minor version is built against exactly one Kotlin SDK
 - `kt-mcpx-stdio`: the legacy SDK session no longer writes `list_changed` broadcasts to stdout before a
   legacy client has sent `initialize`, so a modern-only client never sees notifications it did not
   subscribe to.
+- `kt-mcpx-core`: a modern call that changes the tool, prompt or resource list no longer leaves a
+  "Not connected" uncaught exception in the log. SDK 0.16.0 can fail to deliver a `list_changed` to a
+  session that closes while it is delivering one, so the call's session now waits for its own
+  `list_changed` (up to 500 ms, usually far less) before closing. Calls that change no list are not
+  delayed.
 
 ## [0.1.0] - 2026-11-26
 
