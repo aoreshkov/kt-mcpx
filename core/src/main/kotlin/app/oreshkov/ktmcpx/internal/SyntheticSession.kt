@@ -190,7 +190,7 @@ internal class SyntheticSession(
  * The server's feature registries at one moment. The SDK hands out its persistent maps, so every change
  * makes a new instance; resource templates come as a fresh list and are compared by value.
  */
-private class Registries(server: Server) {
+internal class Registries(server: Server) {
     private val tools = server.tools
     private val prompts = server.prompts
     private val resources = server.resources

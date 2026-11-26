@@ -1,6 +1,7 @@
 package app.oreshkov.ktmcpx
 
 import app.oreshkov.ktmcpx.internal.FORWARDED_ID
+import app.oreshkov.ktmcpx.internal.Registries
 import app.oreshkov.ktmcpx.internal.ServerRequestDecision
 import app.oreshkov.ktmcpx.internal.SyntheticOutcome
 import app.oreshkov.ktmcpx.internal.SyntheticSession
@@ -23,9 +24,9 @@ import java.util.Collections
 import java.util.concurrent.Executors
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
-import kotlin.time.measureTime
 
 /**
  * SDK 0.16.0 clears a closing session's connection before it cancels the session's notification job, so
@@ -80,11 +81,15 @@ class ListChangedCloseTest {
     }
 
     @Test
-    fun `a call that changes nothing closes its session at once`() = runBlocking {
-        val notifications = Collections.synchronizedList(mutableListOf<String>())
-        call("echo", notifications)
-        val took = measureTime { assertIs<SyntheticOutcome.Answered>(call("echo", notifications)) }
-        assertTrue(took.inWholeMilliseconds < 300, "an unchanged call took $took")
+    fun `only a change the server announces makes the session wait`() {
+        val announced = buildJsonObject { put("tools", buildJsonObject { put("listChanged", true) }) }
+        val snapshot = Registries(server)
+        assertFalse(snapshot.changedWithNotice(server, announced), "nothing changed yet")
+
+        server.addTool("late", "Added after the snapshot.") { CallToolResult(content = listOf(TextContent("late"))) }
+        assertTrue(snapshot.changedWithNotice(server, announced))
+        assertFalse(snapshot.changedWithNotice(server, JsonObject(emptyMap())), "without listChanged nothing is sent")
+        assertFalse(snapshot.changedWithNotice(server, null), "no capabilities when initialize failed")
     }
 
     private companion object {
