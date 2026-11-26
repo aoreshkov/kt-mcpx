@@ -13,6 +13,8 @@ import io.ktor.server.routing.routing
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import io.modelcontextprotocol.kotlin.sdk.server.mcpStatelessStreamableHttp
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
+import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -159,8 +161,10 @@ class DualEraTest {
             val listening = async { client.send("subscriptions/listen", filter) }
             // The listener session exists once the stream is subscribed.
             withTimeout(5.seconds) { while (server.sessions.isEmpty()) delay(10) }
-            client.callTool("test_trigger_tool_change")
-            withTimeout(5.seconds) { while (server.tools.keys.none { it == "test_dynamic_tool" }) delay(10) }
+            // Changed directly, not through a modern tools/call: SDK 0.16.0 can throw "Not connected" from
+            // its notification job when the session that emitted a list_changed closes at once, and
+            // testApplication fails on that uncaught exception. The conformance run covers the trigger tool.
+            server.addTool("late_tool", "Added while the stream is open.") { CallToolResult(content = listOf(TextContent("late"))) }
             delay(200)
             bridge.close()
             val response = withTimeout(5.seconds) { listening.await() }
