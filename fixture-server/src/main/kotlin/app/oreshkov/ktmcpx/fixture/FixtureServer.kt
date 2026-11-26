@@ -175,6 +175,7 @@ private fun Server.registerTools() {
         stringArgument("prompt", "The prompt to send to the client's model"),
     ) { request ->
         val prompt = request.arguments?.get("prompt")?.jsonPrimitive?.content ?: "Hello"
+        awaitLegacyClientStream()
         val answer = sample(prompt)
         CallToolResult(content = listOf(TextContent("LLM response: ${(answer.content.firstOrNull() as? TextContent)?.text}")))
     }
@@ -183,6 +184,7 @@ private fun Server.registerTools() {
         "Asks the client for input.",
         stringArgument("message", "The message to show the user"),
     ) { request ->
+        awaitLegacyClientStream()
         val answer = elicitName(request.arguments?.get("message")?.jsonPrimitive?.content ?: "Your name?")
         CallToolResult(content = listOf(TextContent("User response: action=${answer.action}, content=${answer.content}")))
     }
@@ -281,6 +283,17 @@ private fun Server.registerInputRequiredTools() {
         GetPromptResult(listOf(PromptMessage(Role.User, TextContent("Use this context: ${answer.content?.get("context")}"))))
     }
 }
+
+/**
+ * Gives a legacy client time to open its GET stream before the tool asks it something.
+ *
+ * SDK 0.16.0's `mcpStreamableHttp` answers in JSON mode, so a request the server sends while handling a
+ * call (sampling, elicitation) goes out on the client's standalone GET stream, and is dropped without an
+ * error if that stream is not open yet. A client may open it after `notifications/initialized` without
+ * waiting, then call the tool at once (the conformance suite's does), and the call would hang. The
+ * handler cannot see whether the stream is open, so it waits a moment instead.
+ */
+private suspend fun awaitLegacyClientStream() = delay(500.milliseconds)
 
 private fun keyMeta(key: String) = RequestMeta(buildJsonObject { put(ModernInputRequests.KEY_META, key) })
 
