@@ -1,6 +1,5 @@
 package app.oreshkov.ktmcpx
 
-import app.oreshkov.ktmcpx.internal.FORWARDED_ID
 import app.oreshkov.ktmcpx.internal.Registries
 import app.oreshkov.ktmcpx.internal.ServerRequestDecision
 import app.oreshkov.ktmcpx.internal.SyntheticOutcome
@@ -66,7 +65,7 @@ class ListChangedCloseTest {
             forward(
                 buildJsonObject {
                     put("jsonrpc", "2.0")
-                    put("id", FORWARDED_ID)
+                    put("id", 1)
                     put("method", "tools/call")
                     put("params", buildJsonObject { put("name", tool) })
                 },

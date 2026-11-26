@@ -21,6 +21,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.util.UUID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -29,12 +30,9 @@ internal const val LEGACY_PROTOCOL_VERSION: String = "2025-11-25"
 
 private val INITIALIZE_ID = RequestId("kt-mcpx-initialize")
 
-/** The id the forwarded request carries inside the synthetic session; the client's id is restored after. */
-internal val FORWARDED_ID: JsonElement = JsonPrimitive("kt-mcpx-request")
-
 /** How a forwarded request ended. */
 internal sealed interface SyntheticOutcome {
-    /** The session answered: a JSON-RPC response or error, still carrying [FORWARDED_ID]. */
+    /** The session answered: a JSON-RPC response or error, still carrying the session's forwarded id. */
     class Answered(val message: JsonObject) : SyntheticOutcome
 
     /** The bridge ended the call early with this error (code, message, data), e.g. -32021. */
@@ -81,6 +79,12 @@ internal class SyntheticSession(
     /** How long to wait for further questions after one the client must answer (see [ServerRequestDecision.Ask]). */
     private val inputWindow: Duration = Duration.ZERO,
 ) {
+    /**
+     * The id the forwarded request carries inside this session; the bridge answers the client under its own
+     * id. Unique per session, so a log one handler broadcasts to every session passes only its own
+     * session's check (see [InMemoryServerTransport]).
+     */
+    private val forwardedId = RequestId("kt-mcpx-request-${UUID.randomUUID()}")
     private val abort = CompletableDeferred<JsonObject>()
     private val asked = LinkedHashMap<String, JsonObject>()
     private val askedSignal = Channel<Unit>(Channel.CONFLATED)
@@ -96,6 +100,7 @@ internal class SyntheticSession(
     ): T {
         val listChanged = Channel<Unit>(Channel.CONFLATED)
         val transport = InMemoryServerTransport(
+            ownRequestId = forwardedId,
             onNotification = {
                 if (it.method.endsWith(LIST_CHANGED_SUFFIX)) listChanged.trySend(Unit)
                 onNotification(it.toJsonObject())
@@ -152,8 +157,9 @@ internal class SyntheticSession(
     private suspend fun InMemoryServerTransport.initialize(): JsonObject =
         initializeSession(clientCapabilities, clientInfo ?: SYNTHETIC_CLIENT_INFO)
 
+    /** Forwards [request] under this session's [forwardedId], whatever id it carries. */
     private suspend fun InMemoryServerTransport.forward(request: JsonObject): SyntheticOutcome = coroutineScope {
-        val rpcRequest = request.toRpcMessage() as JSONRPCRequest
+        val rpcRequest = request.with("id", McpIdJson.encode(forwardedId)).toRpcMessage() as JSONRPCRequest
         val reply = async { exchange(rpcRequest) }
         // Settles once a question has arrived and no other one followed within the window.
         val questionsSettled = async {

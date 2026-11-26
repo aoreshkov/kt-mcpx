@@ -75,6 +75,14 @@ goes to the bridge. Every other line goes to one long-lived SDK session, as befo
 - Progress for the request's token, and log messages at or above the request's `_meta` log level, go
   on the response stream. On HTTP the answer switches to SSE when the first one arrives. On stdio they
   are written as lines before the response. Other notifications are dropped.
+- A log message reaches a request's stream only when that request's handler sent it, as 2026-07-28
+  requires. Logs from child coroutines and `withContext` blocks count. Logs from work handed to
+  another scope (a worker pool, a channel to a logging coroutine) are dropped. To keep those, send them
+  with `relatedRequestId` set to the handler's request id, or run that work under
+  `withContext(currentRequestHandlerExtra()!!)`.
+- A request beyond `maxConcurrentRequests` (default 1000), or a listen stream beyond
+  `maxListenStreams` (default 100), gets -32603 at once: HTTP 503 with `Retry-After: 1` on Ktor, the
+  same error line on stdio.
 - `subscriptions/listen` gets `notifications/subscriptions/acknowledged`, then each `list_changed` and
   `resources/updated` its filter asks for, tagged with the subscription id. One long-lived SDK session
   of your `Server`, open while any stream is, receives them, so the SDK's own broadcasts and
@@ -104,14 +112,61 @@ val bridge = ModernBridge(server) {
 }
 ```
 
+## Adopting kt-mcpx
+
+- **Broadcasts.** The bridge's sessions appear in `server.sessions`: one per modern request while it
+  runs, and the listen listener. Skip them with `session.isKtMcpxSession`. Catch failures for each
+  session on its own, since any session can close between the snapshot and the send:
+
+  ```kotlin
+  for (session in server.sessions.values) {
+      if (session.isKtMcpxSession) continue
+      try {
+          session.sendLoggingMessage(message)
+      } catch (e: CancellationException) {
+          throw e
+      } catch (e: Exception) {
+          // closed meanwhile
+      }
+  }
+  ```
+
+  A modern client gets `list_changed` and `resources/updated` through `subscriptions/listen`, and log
+  messages only from its own request's handler, whatever the loop does.
+- **`onConnect` fires for every modern request**, because each one opens a session. Keep per-session
+  setup cheap, and don't count connected clients there.
+- **stdio:** nothing but `serveDualEraStdio` may write to stdout (see [Usage](#usage)).
+- **Caching.** Results of `tools/list`, `prompts/list`, `resources/list` and the other cacheable
+  methods carry `ttlMs` (default 60 s). If your lists change at runtime, either serve
+  `subscriptions/listen` to clients that use it, or set a zero TTL on those methods, such as
+  `cache(CacheableMethod.ResourcesList, ttl = Duration.ZERO)`, so clients that don't listen re-fetch.
+- **HTTP:** mount `dualEra` on the same path as `mcpStreamableHttp`, so the SDK's DNS-rebinding
+  protection (Host and Origin checks) covers modern requests too. Without an SDK route on that path,
+  install `DnsRebindingProtection` on `route(path)` yourself.
+- **Upgrades.** Each kt-mcpx minor pins one SDK minor, so bump them together, for example with a
+  Renovate group:
+
+  ```json
+  {
+    "packageRules": [
+      {
+        "groupName": "MCP Kotlin SDK and kt-mcpx",
+        "matchPackageNames": ["io.modelcontextprotocol:**", "app.oreshkov.ktmcpx:**"]
+      }
+    ]
+  }
+  ```
+
 ## Compatibility
 
 | kt-mcpx | Kotlin SDK | MCP revisions |
 |---|---|---|
+| 0.2 | 0.16 | 2026-07-28 through the bridge; legacy revisions through the SDK |
 | 0.1 | 0.16 | 2026-07-28 through the bridge; legacy revisions through the SDK |
 
-Each kt-mcpx minor version is built against exactly one SDK minor version: bump both together. The
-artifacts are JVM 17 bytecode and need Kotlin 2.2 or newer.
+Each kt-mcpx minor version is built against exactly one SDK minor version: bump both together. Several
+kt-mcpx minors can share one SDK minor. A patch release may add API, but never removes or changes it.
+The artifacts are JVM 17 bytecode and need Kotlin 2.2 or newer.
 
 ## Conformance
 

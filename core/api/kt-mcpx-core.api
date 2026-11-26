@@ -1,3 +1,7 @@
+public final class app/oreshkov/ktmcpx/BridgeSessionsKt {
+	public static final fun isKtMcpxSession (Lio/modelcontextprotocol/kotlin/sdk/server/ServerSession;)Z
+}
+
 public final class app/oreshkov/ktmcpx/CachePolicy {
 	public static final field Companion Lapp/oreshkov/ktmcpx/CachePolicy$Companion;
 	public synthetic fun <init> (JLapp/oreshkov/ktmcpx/CacheScope;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -49,10 +53,14 @@ public final class app/oreshkov/ktmcpx/ModernBridge$Config {
 	public final fun cache-8Mi8wO0 (Lapp/oreshkov/ktmcpx/CacheableMethod;JLapp/oreshkov/ktmcpx/CacheScope;)V
 	public static synthetic fun cache-8Mi8wO0$default (Lapp/oreshkov/ktmcpx/ModernBridge$Config;Lapp/oreshkov/ktmcpx/CacheableMethod;JLapp/oreshkov/ktmcpx/CacheScope;ILjava/lang/Object;)V
 	public final fun getInputRequestWindow-UwyO8pc ()J
+	public final fun getMaxConcurrentRequests ()I
+	public final fun getMaxListenStreams ()I
 	public final fun getRequestStateTtl-UwyO8pc ()J
 	public final fun getRequestTimeout-UwyO8pc ()J
 	public final fun requestStateSecret ([B)V
 	public final fun setInputRequestWindow-LRDsOJo (J)V
+	public final fun setMaxConcurrentRequests (I)V
+	public final fun setMaxListenStreams (I)V
 	public final fun setRequestStateTtl-LRDsOJo (J)V
 	public final fun setRequestTimeout-LRDsOJo (J)V
 }

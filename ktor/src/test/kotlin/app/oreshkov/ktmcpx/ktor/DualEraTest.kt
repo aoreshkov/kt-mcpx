@@ -2,23 +2,36 @@ package app.oreshkov.ktmcpx.ktor
 
 import app.oreshkov.ktmcpx.ModernBridge
 import app.oreshkov.ktmcpx.ModernErrorCodes
+import app.oreshkov.ktmcpx.ModernHeaderNames
+import app.oreshkov.ktmcpx.ModernProtocol
 import app.oreshkov.ktmcpx.fixture.fixtureModule
 import app.oreshkov.ktmcpx.fixture.fixtureServer
 import app.oreshkov.ktmcpx.testing.ModernContract
 import app.oreshkov.ktmcpx.testing.ModernTestClient
 import app.oreshkov.ktmcpx.testing.ToolProbe
 import io.ktor.client.HttpClient
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
+import io.ktor.http.contentType
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import io.modelcontextprotocol.kotlin.sdk.server.mcpStatelessStreamableHttp
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
+import io.modelcontextprotocol.kotlin.sdk.types.TextContent
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -40,6 +53,47 @@ class DualEraTest {
         application { fixtureModule() }
 
         ModernContract.verify(modernClient(), ToolProbe("test_simple_text")).assertPassed()
+    }
+
+    @Test
+    fun `a request over the concurrency limit is 503 with Retry-After`() = testApplication {
+        val entered = CompletableDeferred<Unit>()
+        val gate = CompletableDeferred<Unit>()
+        val server = fixtureServer().apply {
+            addTool("block", "Waits for the gate.") {
+                entered.complete(Unit)
+                gate.await()
+                CallToolResult(content = listOf(TextContent("done")))
+            }
+        }
+        val bridge = ModernBridge(server) { maxConcurrentRequests = 1 }
+        application { routing { dualEra("/mcp") { bridge } } }
+
+        coroutineScope {
+            val first = async { modernClient().send("tools/call", buildJsonObject { put("name", "block") }) }
+            withTimeout(5.seconds) { entered.await() }
+            val body = buildJsonObject {
+                put("jsonrpc", "2.0")
+                put("id", 1)
+                put("method", "tools/list")
+                put("params", buildJsonObject { put("_meta", modernClient().defaultMeta()) })
+            }
+            val refused = client.post("/mcp") {
+                header(HttpHeaders.Host, "localhost")
+                header(ModernHeaderNames.METHOD, "tools/list")
+                header(ModernHeaderNames.PROTOCOL_VERSION, ModernProtocol.VERSION)
+                header(HttpHeaders.Accept, "application/json, text/event-stream")
+                contentType(ContentType.Application.Json)
+                setBody(body.toString())
+            }
+
+            assertEquals(503, refused.status.value)
+            assertEquals("1", refused.headers[HttpHeaders.RetryAfter])
+            val error = Json.parseToJsonElement(refused.bodyAsText()).jsonObject["error"]!!.jsonObject
+            assertEquals(ModernErrorCodes.INTERNAL_ERROR, error["code"]!!.jsonPrimitive.int)
+            gate.complete(Unit)
+            assertEquals(200, first.await().status)
+        }
     }
 
     @Test

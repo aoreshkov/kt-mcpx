@@ -22,6 +22,11 @@ Analysis and plan documents live in `docs/`, which is private and git-ignored.
     MRTR: `internal/InputRequests.kt` (stable input keys, the HMAC-signed `requestState`) and the `Ask`
     decision in `SyntheticSession`, which collects questions until `inputRequestWindow` passes quietly.
     `subscriptions/listen`: `internal/Subscriptions.kt`, one long-lived listener session per bridge.
+    Every bridge session uses `internal/InMemoryServerTransport`, which lets a `notifications/message`
+    through only from its own forwarded request's handler (each `SyntheticSession` has a unique forwarded
+    id; `SdkContextContractTest` pins the SDK behaviour this needs). `BridgeSessions.kt`'s public
+    `isKtMcpxSession` relies on that transport being the bridge's alone. The concurrency caps are
+    `Config.maxConcurrentRequests`/`maxListenStreams`, taken in `ModernBridge.handle` after validation.
   - `ktor/` (`:kt-mcpx-ktor`): `Route.dualEra(path) { bridge }`, with the header-only selector that routes
     modern POSTs (`ModernRequestSelector`) and lazy SSE.
   - `stdio/` (`:kt-mcpx-stdio`): `serveDualEraStdio(server, bridge) { legacySession -> }` in place of

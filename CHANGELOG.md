@@ -29,8 +29,17 @@ API incompatibly, and each minor version is built against exactly one Kotlin SDK
   final result.
 - `kt-mcpx-ktor`: `subscriptions/listen` is served as an SSE stream; a request for it without
   `text/event-stream` in `Accept` gets 406.
+- `kt-mcpx-core`: `ServerSession.isKtMcpxSession`, so code that broadcasts to every entry of
+  `server.sessions` can skip the bridge's sessions.
+- `kt-mcpx-core`: `ModernBridge.Config.maxConcurrentRequests` (default 1000) and `maxListenStreams`
+  (default 100). A request over its limit gets -32603 at once: HTTP 503 with `Retry-After: 1` on Ktor,
+  the same error line on stdio.
 
 ### Fixed
+
+- `kt-mcpx-core`: a log message that an adopter broadcast to every session in `server.sessions` reached
+  every modern request's stream that asked for logs. A request's stream now carries only the log
+  messages its own handler sent, as 2026-07-28 requires, and `subscriptions/listen` streams carry none.
 
 - `kt-mcpx-stdio`: the legacy SDK session no longer writes `list_changed` broadcasts to stdout before a
   legacy client has sent `initialize`, so a modern-only client never sees notifications it did not

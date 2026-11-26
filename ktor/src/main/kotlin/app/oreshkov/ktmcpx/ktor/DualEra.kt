@@ -171,8 +171,11 @@ private suspend fun RoutingContext.serveModern(bridge: ModernBridge, maxRequestB
 
 private suspend fun RoutingContext.respond(reply: ModernReply) {
     when (reply) {
-        is ModernReply.Response ->
+        is ModernReply.Response -> {
+            // The bridge answers 503 only when it is at its concurrency limit, which clears quickly.
+            if (reply.httpStatus == HttpStatusCode.ServiceUnavailable.value) call.response.header(HttpHeaders.RetryAfter, "1")
             call.respondText(reply.message.toString(), ContentType.Application.Json, HttpStatusCode.fromValue(reply.httpStatus))
+        }
         ModernReply.Accepted -> call.respond(HttpStatusCode.Accepted)
     }
 }
