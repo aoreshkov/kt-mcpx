@@ -40,6 +40,34 @@ public object ModernMetaKeys {
     public const val SERVER_INFO: String = "io.modelcontextprotocol/serverInfo"
 }
 
+/**
+ * How a handler's requests to the client become 2026-07-28 input requests (SEP-2322, MRTR).
+ *
+ * On `tools/call`, `prompts/get` and `resources/read`, a handler that asks the client for something
+ * (`createElicitation`, `createMessage`, `listRoots`) gets no answer during the request. The bridge
+ * ends the request with `resultType: "input_required"`, one input request per question, and cancels
+ * the handler. When the client retries with `inputResponses`, the bridge runs the handler again in a
+ * fresh session and answers each question at once from the matching response. Answers from earlier
+ * rounds travel in the signed `requestState`, so a handler that asks several times, one question after
+ * another, gets every answer on the round that completes it.
+ *
+ * **A handler must be idempotent up to the point where it asks**, because everything before the
+ * question runs once per round. Questions asked concurrently (in `async` blocks) within a short
+ * window end up in the same `input_required` result.
+ *
+ * Each question gets a key that stays the same across rounds: the method and a digest of its params,
+ * unless the request's `_meta` names one under [KEY_META]. Naming keys is optional; it only matters to
+ * clients that expect particular keys.
+ */
+public object ModernInputRequests {
+    /**
+     * The `_meta` key that names an input request's key, as a string:
+     * `ElicitRequestFormParams(..., meta = RequestMeta(buildJsonObject { put(KEY_META, "user_name") }))`.
+     * The bridge removes it before the client sees the request.
+     */
+    public const val KEY_META: String = "app.oreshkov.ktmcpx/inputKey"
+}
+
 /** JSON-RPC error codes the 2026-07-28 revision adds, next to the standard ones. */
 public object ModernErrorCodes {
     public const val PARSE_ERROR: Int = -32_700

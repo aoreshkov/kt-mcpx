@@ -148,6 +148,39 @@ class DualEraStdioTest {
     }
 
     @Test
+    fun `a listen stream and an MRTR round trip share the stream with other requests`() = serve(fixtureServer()) {
+        send(modern("S1", "subscriptions/listen", buildJsonObject { put("notifications", buildJsonObject { put("toolsListChanged", true) }) }))
+        val ack = next()
+        assertEquals("notifications/subscriptions/acknowledged", ack["method"]!!.jsonPrimitive.content)
+
+        send(modern("T1", "tools/call", buildJsonObject { put("name", "test_trigger_tool_change") }))
+        val (before, _) = collectUntil(JsonPrimitive("T1"))
+        // The broadcast is asynchronous: it may come before or after the tool's response.
+        val change = before.firstOrNull { it["method"]?.jsonPrimitive?.content == "notifications/tools/list_changed" } ?: next()
+        assertEquals("notifications/tools/list_changed", change["method"]!!.jsonPrimitive.content)
+        assertEquals(JsonPrimitive("S1"), change["params"]!!.jsonObject["_meta"]!!.jsonObject["io.modelcontextprotocol/subscriptionId"])
+
+        val elicitation = mapOf(ModernMetaKeys.CLIENT_CAPABILITIES to buildJsonObject { put("elicitation", buildJsonObject {}) })
+        val call = buildJsonObject { put("name", "test_input_required_result_elicitation") }
+        send(modern("E1", "tools/call", call, extraMeta = elicitation))
+        val first = responseTo("E1").result
+        assertEquals("input_required", first["resultType"]!!.jsonPrimitive.content)
+        val retry = JsonObject(
+            call + mapOf(
+                "inputResponses" to buildJsonObject {
+                    put("user_name", buildJsonObject {
+                        put("action", "accept")
+                        put("content", buildJsonObject { put("name", "Ada") })
+                    })
+                },
+                "requestState" to first["requestState"]!!,
+            ),
+        )
+        send(modern("E2", "tools/call", retry, extraMeta = elicitation))
+        assertEquals("Hello, Ada!", contentText(responseTo("E2").result))
+    }
+
+    @Test
     fun `lines that are not JSON-RPC get an error, blank lines nothing`() = serve(fixtureServer()) {
         send("")
         send("this is not json")

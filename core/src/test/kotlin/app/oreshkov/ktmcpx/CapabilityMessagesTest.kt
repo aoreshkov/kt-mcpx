@@ -65,10 +65,10 @@ class CapabilityMessagesTest {
 
     @Test
     fun `with the capability declared it is not -32021`() {
-        // The request reaches the bridge, which cannot relay it yet (no MRTR): the handler fails.
+        // The request reaches the bridge, which passes it to the client as an input request.
         val reply = callWith("sample", required("sampling"))
         assertEquals(200, reply.httpStatus)
-        assertEquals("true", reply.result["isError"]!!.jsonPrimitive.content)
+        assertEquals("input_required", reply.result["resultType"]!!.jsonPrimitive.content)
     }
 
     private fun io.modelcontextprotocol.kotlin.sdk.server.Server.tool(name: String, block: suspend ClientConnection.() -> Any) {

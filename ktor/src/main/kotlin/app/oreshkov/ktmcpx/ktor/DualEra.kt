@@ -56,7 +56,8 @@ public const val DEFAULT_MAX_REQUEST_BODY_SIZE: Long = 4L * 1024 * 1024
  *
  * The answer is JSON, unless a notification for the request (progress, a log message) arrives before
  * the result and the client accepts `text/event-stream`: then the response switches to an SSE stream
- * that ends with the result.
+ * that ends with the result. `subscriptions/listen` is always an SSE stream, open until the client
+ * disconnects or [ModernBridge.close] ends it; a client that does not accept SSE gets 406 for it.
  */
 public fun Route.dualEra(
     path: String,
@@ -132,6 +133,11 @@ private suspend fun RoutingContext.serveModern(bridge: ModernBridge, maxRequestB
         params = paramHeaders(call.request.headers),
     )
     if (!acceptsEventStream()) {
+        if (headers.method == LISTEN_METHOD) {
+            // A listen stream only ever answers on SSE; without it the request would never end.
+            call.respondText(notAcceptable().toString(), ContentType.Application.Json, HttpStatusCode.NotAcceptable)
+            return
+        }
         respond(bridge.handle(body, headers))
         return
     }
@@ -196,14 +202,21 @@ private suspend fun RoutingContext.readBody(limit: Long): String? {
     return if (bytes.size > limit) null else bytes.decodeToString()
 }
 
-private fun tooLarge(limit: Long): JsonObject = buildJsonObject {
+private const val LISTEN_METHOD = "subscriptions/listen"
+
+private fun tooLarge(limit: Long): JsonObject = invalidRequest("Invalid request: the body exceeds $limit bytes")
+
+private fun notAcceptable(): JsonObject =
+    invalidRequest("Invalid request: $LISTEN_METHOD streams over SSE, so the Accept header must include text/event-stream")
+
+private fun invalidRequest(message: String): JsonObject = buildJsonObject {
     put("jsonrpc", "2.0")
     put("id", JsonNull)
     put(
         "error",
         buildJsonObject {
             put("code", ModernErrorCodes.INVALID_REQUEST)
-            put("message", "Invalid request: the body exceeds $limit bytes")
+            put("message", message)
         },
     )
 }

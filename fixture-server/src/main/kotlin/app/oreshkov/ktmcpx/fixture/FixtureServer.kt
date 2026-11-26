@@ -1,6 +1,7 @@
 package app.oreshkov.ktmcpx.fixture
 
 import app.oreshkov.ktmcpx.ModernBridge
+import app.oreshkov.ktmcpx.ModernInputRequests
 import app.oreshkov.ktmcpx.ktor.dualEra
 import app.oreshkov.ktmcpx.stdio.serveDualEraStdio
 import io.github.oshai.kotlinlogging.KotlinLoggingConfiguration
@@ -12,12 +13,17 @@ import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
 import io.modelcontextprotocol.kotlin.sdk.server.mcpStreamableHttp
 import io.modelcontextprotocol.kotlin.sdk.types.AudioContent
+import io.modelcontextprotocol.kotlin.sdk.types.BaseRequestParams
 import io.modelcontextprotocol.kotlin.sdk.types.BlobResourceContents
+import io.modelcontextprotocol.kotlin.sdk.types.BooleanSchema
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.CompleteRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CompleteResult
 import io.modelcontextprotocol.kotlin.sdk.types.CreateMessageRequest
 import io.modelcontextprotocol.kotlin.sdk.types.CreateMessageRequestParams
+import io.modelcontextprotocol.kotlin.sdk.types.CreateMessageResult
+import io.modelcontextprotocol.kotlin.sdk.types.ElicitRequest
+import io.modelcontextprotocol.kotlin.sdk.types.ElicitRequestFormParams
 import io.modelcontextprotocol.kotlin.sdk.types.ElicitRequestParams
 import io.modelcontextprotocol.kotlin.sdk.types.EmbeddedResource
 import io.modelcontextprotocol.kotlin.sdk.types.EmptyJsonObject
@@ -26,14 +32,17 @@ import io.modelcontextprotocol.kotlin.sdk.types.ImageContent
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.LoggingLevel
 import io.modelcontextprotocol.kotlin.sdk.types.LoggingMessageNotification
+import io.modelcontextprotocol.kotlin.sdk.types.ListRootsRequest
 import io.modelcontextprotocol.kotlin.sdk.types.LoggingMessageNotificationParams
 import io.modelcontextprotocol.kotlin.sdk.types.Method
+import io.modelcontextprotocol.kotlin.sdk.types.PrimitiveSchemaDefinition
 import io.modelcontextprotocol.kotlin.sdk.types.ProgressNotification
 import io.modelcontextprotocol.kotlin.sdk.types.ProgressNotificationParams
 import io.modelcontextprotocol.kotlin.sdk.types.PromptArgument
 import io.modelcontextprotocol.kotlin.sdk.types.PromptMessage
 import io.modelcontextprotocol.kotlin.sdk.types.PromptReference
 import io.modelcontextprotocol.kotlin.sdk.types.ReadResourceResult
+import io.modelcontextprotocol.kotlin.sdk.types.RequestMeta
 import io.modelcontextprotocol.kotlin.sdk.types.ResourceTemplateReference
 import io.modelcontextprotocol.kotlin.sdk.types.Role
 import io.modelcontextprotocol.kotlin.sdk.types.SamplingMessage
@@ -42,6 +51,9 @@ import io.modelcontextprotocol.kotlin.sdk.types.StringSchema
 import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import io.modelcontextprotocol.kotlin.sdk.types.TextResourceContents
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.io.asSource
@@ -60,6 +72,9 @@ import kotlin.time.Duration.Companion.milliseconds
 private const val RED_PIXEL_PNG =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
 
+private const val DYNAMIC_TOOL = "test_dynamic_tool"
+private const val DYNAMIC_PROMPT = "test_dynamic_prompt"
+
 /** A WAV header with no samples: 8 kHz, mono, 8 bit. */
 private const val SILENT_WAV = "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
 
@@ -73,9 +88,9 @@ fun fixtureServer(): Server {
         serverInfo = Implementation(name = "kt-mcpx-fixture", version = "1.0.0"),
         options = ServerOptions(
             capabilities = ServerCapabilities(
-                tools = ServerCapabilities.Tools(listChanged = false),
-                prompts = ServerCapabilities.Prompts(listChanged = false),
-                resources = ServerCapabilities.Resources(listChanged = false, subscribe = true),
+                tools = ServerCapabilities.Tools(listChanged = true),
+                prompts = ServerCapabilities.Prompts(listChanged = true),
+                resources = ServerCapabilities.Resources(listChanged = true, subscribe = true),
                 logging = EmptyJsonObject,
                 completions = EmptyJsonObject,
             ),
@@ -175,6 +190,24 @@ private fun Server.registerTools() {
         val answer = elicitName("Your name?")
         CallToolResult(content = listOf(TextContent("User response: action=${answer.action}")))
     }
+    registerInputRequiredTools()
+    // SEP-2575: changing the registries makes the SDK broadcast list_changed, which subscriptions/listen carries.
+    server.tool("test_trigger_tool_change", "Adds or removes a tool, so the tool list changes.") {
+        if (!server.removeTool(DYNAMIC_TOOL)) {
+            server.tool(DYNAMIC_TOOL, "Appears and disappears with test_trigger_tool_change.") {
+                CallToolResult(content = listOf(TextContent("dynamic")))
+            }
+        }
+        CallToolResult(content = listOf(TextContent("Tool list changed")))
+    }
+    server.tool("test_trigger_prompt_change", "Adds or removes a prompt, so the prompt list changes.") {
+        if (!server.removePrompt(DYNAMIC_PROMPT)) {
+            server.addPrompt(DYNAMIC_PROMPT, "Appears and disappears with test_trigger_prompt_change.") {
+                GetPromptResult(listOf(PromptMessage(Role.User, TextContent("dynamic"))))
+            }
+        }
+        CallToolResult(content = listOf(TextContent("Prompt list changed")))
+    }
     // SEP-2243: the annotations are plain schema keywords; the bridge checks the Mcp-Param-* headers.
     server.tool(
         "test_custom_headers",
@@ -190,6 +223,79 @@ private fun Server.registerTools() {
         CallToolResult(content = listOf(TextContent("Arguments: ${request.arguments ?: buildJsonObject {}}")))
     }
 }
+
+/**
+ * The suite's SEP-2322 (MRTR) tools. Each one asks the client the way a legacy handler does
+ * (`createElicitation`, `createMessage`, `listRoots`); the bridge turns the questions into
+ * `input_required` results and replays the handler with the answers. The suite expects some input
+ * request keys by name, which the requests' `_meta` sets ([ModernInputRequests.KEY_META]).
+ */
+private fun Server.registerInputRequiredTools() {
+    val server = this
+    server.tool("test_input_required_result_elicitation", "Asks for the user's name, then greets them.") {
+        val answer = elicit("What is your name?", "user_name", "name" to StringSchema())
+        CallToolResult(content = listOf(TextContent("Hello, ${answer.content?.get("name")?.jsonPrimitive?.content}!")))
+    }
+    server.tool("test_input_required_result_sampling", "Asks the client's model a question.") {
+        val answer = sample("What is the capital of France?", key = "capital_question")
+        CallToolResult(content = listOf(TextContent("Sampling answered: ${answer.text()}")))
+    }
+    server.tool("test_input_required_result_list_roots", "Lists the client's roots.") {
+        val roots = listRoots(ListRootsRequest(BaseRequestParams(keyMeta("client_roots")))).roots
+        CallToolResult(content = listOf(TextContent("Roots: ${roots.joinToString { it.uri }}")))
+    }
+    for (name in listOf("test_input_required_result_request_state", "test_input_required_result_tampered_state")) {
+        server.tool(name, "Asks for a confirmation; the bridge seals the answer in requestState.") {
+            val answer = elicit("Please confirm", "confirm", "ok" to BooleanSchema())
+            CallToolResult(content = listOf(TextContent("state-ok: confirmed=${answer.content?.get("ok")}")))
+        }
+    }
+    server.tool("test_input_required_result_multiple_inputs", "Asks three questions at once.") {
+        coroutineScope {
+            val name = async { elicit("What is your name?", "user_name", "name" to StringSchema()) }
+            val greeting = async { sample("Generate a greeting", key = "greeting", maxTokens = 50) }
+            val roots = async { listRoots(ListRootsRequest(BaseRequestParams(keyMeta("client_roots")))) }
+            val text = "name=${name.await().content?.get("name")}, greeting=${greeting.await().text()}, " +
+                "roots=${roots.await().roots.size}"
+            CallToolResult(content = listOf(TextContent(text)))
+        }
+    }
+    server.tool("test_input_required_result_multi_round", "Asks two questions, one after the other.") {
+        val name = elicit("Step 1: What is your name?", "step1", "name" to StringSchema())
+        val color = elicit("Step 2: What is your favorite color?", "step2", "color" to StringSchema())
+        CallToolResult(content = listOf(TextContent("name=${name.content?.get("name")}, color=${color.content?.get("color")}")))
+    }
+    server.tool("test_input_required_result_capabilities", "Asks only for what the client declared.") {
+        val declared = server.sessions[sessionId]?.clientCapabilities
+        coroutineScope {
+            val asked = listOfNotNull(
+                declared?.sampling?.let { async { "sampling: ${sample("Say hello", key = "sampling").text()}" } },
+                declared?.elicitation?.let { async { "elicitation: ${elicit("Your name?", "elicitation", "name" to StringSchema()).action}" } },
+                declared?.roots?.let { async { "roots: ${listRoots().roots.size}" } },
+            )
+            CallToolResult(content = listOf(TextContent(asked.awaitAll().joinToString().ifEmpty { "nothing declared" })))
+        }
+    }
+    addPrompt("test_input_required_result_prompt", "A prompt that asks the user for context first.") {
+        val answer = elicit("What context should the prompt use?", "user_context", "context" to StringSchema())
+        GetPromptResult(listOf(PromptMessage(Role.User, TextContent("Use this context: ${answer.content?.get("context")}"))))
+    }
+}
+
+private fun keyMeta(key: String) = RequestMeta(buildJsonObject { put(ModernInputRequests.KEY_META, key) })
+
+private suspend fun ClientConnection.elicit(message: String, key: String, vararg fields: Pair<String, PrimitiveSchemaDefinition>) =
+    createElicitation(
+        ElicitRequest(
+            ElicitRequestFormParams(
+                message = message,
+                requestedSchema = ElicitRequestParams.RequestedSchema(properties = mapOf(*fields), required = fields.map { it.first }),
+                meta = keyMeta(key),
+            ),
+        ),
+    )
+
+private fun CreateMessageResult.text(): String? = (content.firstOrNull() as? TextContent)?.text
 
 private fun headerProperty(type: String, header: String, description: String) = buildJsonObject {
     put("type", type)
@@ -363,9 +469,13 @@ private fun stringArgument(name: String, description: String) = ToolSchema(
 private suspend fun ClientConnection.log(message: String) =
     sendLoggingMessage(LoggingMessageNotification(LoggingMessageNotificationParams(LoggingLevel.Info, JsonPrimitive(message))))
 
-private suspend fun ClientConnection.sample(prompt: String) = createMessage(
+private suspend fun ClientConnection.sample(prompt: String, key: String? = null, maxTokens: Int = 100) = createMessage(
     CreateMessageRequest(
-        CreateMessageRequestParams(maxTokens = 100, messages = listOf(SamplingMessage(Role.User, listOf(TextContent(prompt))))),
+        CreateMessageRequestParams(
+            maxTokens = maxTokens,
+            messages = listOf(SamplingMessage(Role.User, listOf(TextContent(prompt)))),
+            meta = key?.let(::keyMeta),
+        ),
     ),
 )
 

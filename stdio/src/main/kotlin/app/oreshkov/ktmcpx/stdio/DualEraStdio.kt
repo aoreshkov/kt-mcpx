@@ -9,7 +9,10 @@ import io.modelcontextprotocol.kotlin.sdk.server.ServerSession
 import io.modelcontextprotocol.kotlin.sdk.shared.AbstractTransport
 import io.modelcontextprotocol.kotlin.sdk.shared.TransportSendOptions
 import io.modelcontextprotocol.kotlin.sdk.types.JSONRPCMessage
+import io.modelcontextprotocol.kotlin.sdk.types.JSONRPCNotification
+import io.modelcontextprotocol.kotlin.sdk.types.JSONRPCRequest
 import io.modelcontextprotocol.kotlin.sdk.types.McpJson
+import io.modelcontextprotocol.kotlin.sdk.types.Method
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -185,15 +188,25 @@ private class LineWriter(private val sink: Sink) {
     }
 }
 
-/** The SDK session's end of the shared stream: lines the router hands it in, its messages out. */
+/**
+ * The SDK session's end of the shared stream: lines the router hands it in, its messages out.
+ *
+ * The session exists from the start, so it receives the server's `list_changed` broadcasts even when
+ * only a modern client is on the stream. Its notifications are therefore dropped until a legacy client
+ * has sent `initialize`: a modern client gets those only on a `subscriptions/listen` stream it asked for.
+ */
 private class LegacyStdioTransport(private val writer: LineWriter) : AbstractTransport() {
     @Volatile
     private var closed = false
+
+    @Volatile
+    private var legacyClient = false
 
     override suspend fun start() = Unit
 
     override suspend fun send(message: JSONRPCMessage, options: TransportSendOptions?) {
         check(!closed) { "The stdio transport is closed" }
+        if (message is JSONRPCNotification && !legacyClient) return
         writer.write(McpJson.encodeToString(JSONRPCMessage.serializer(), message))
     }
 
@@ -204,6 +217,7 @@ private class LegacyStdioTransport(private val writer: LineWriter) : AbstractTra
     }
 
     suspend fun deliver(message: JSONRPCMessage) {
+        if (message is JSONRPCRequest && message.method == Method.Defined.Initialize.value) legacyClient = true
         if (!closed) _onMessage(message)
     }
 }

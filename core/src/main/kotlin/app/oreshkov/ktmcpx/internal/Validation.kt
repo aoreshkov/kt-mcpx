@@ -52,7 +52,14 @@ internal class ValidRequest(
     val method: String,
     val params: JsonObject,
     val meta: ModernMeta,
-)
+    /** An MRTR retry's answers, by input request key; empty on a first round and on other methods. */
+    val inputResponses: Map<String, JsonObject> = emptyMap(),
+    /** An MRTR retry's `requestState`, unchecked; `null` on a first round and on other methods. */
+    val requestState: JsonElement? = null,
+) {
+    /** Whether this is an MRTR retry, whose result must not be cached. */
+    val isRetry: Boolean get() = inputResponses.isNotEmpty() || requestState != null
+}
 
 internal sealed interface Validation {
     class Valid(val request: ValidRequest) : Validation
@@ -105,7 +112,7 @@ internal fun validate(
     if (headers != null && headers.method != method) {
         return reject(id, ModernErrorCodes.HEADER_MISMATCH, headerMismatch(ModernHeaderNames.METHOD,headers.method, method))
     }
-    if (method != DISCOVER_METHOD && method !in FORWARDED_METHODS) {
+    if (method != DISCOVER_METHOD && method != LISTEN_METHOD && method !in FORWARDED_METHODS) {
         return reject(id, ModernErrorCodes.METHOD_NOT_FOUND, "Method not found: $method")
     }
 
@@ -146,7 +153,19 @@ internal fun validate(
             paramHeaderMismatch(schema, arguments, headers)?.let { return reject(id, ModernErrorCodes.HEADER_MISMATCH, it) }
         }
     }
-    return Validation.Valid(ValidRequest(id, method, params, meta))
+    if (method == LISTEN_METHOD && SubscriptionFilter.parse(params["notifications"]) == null) {
+        return reject(
+            id,
+            ModernErrorCodes.INVALID_PARAMS,
+            "Invalid params: notifications must be a subscription filter (boolean *ListChanged flags, resourceSubscriptions as an array of URIs)",
+        )
+    }
+    if (method !in INPUT_REQUIRED_METHODS) return Validation.Valid(ValidRequest(id, method, params, meta))
+    val responses = when (val parsed = parseInputResponses(params)) {
+        is InputResponsesParse.Invalid -> return reject(id, ModernErrorCodes.INVALID_PARAMS, parsed.reason)
+        is InputResponsesParse.Ok -> parsed.responses
+    }
+    return Validation.Valid(ValidRequest(id, method, params, meta, responses, params[REQUEST_STATE]))
 }
 
 private fun headerMismatch(header: String, headerValue: String?, bodyValue: String?): String =

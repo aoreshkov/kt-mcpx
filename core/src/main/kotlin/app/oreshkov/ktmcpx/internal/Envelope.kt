@@ -19,25 +19,15 @@ private const val LEGACY_RESOURCE_NOT_FOUND = -32_002
 /** The SDK's URL-elicitation-required code; 2026-07-28 retired it (MRTR replaces it). */
 private const val LEGACY_URL_ELICITATION_REQUIRED = -32_042
 
-/** Server capability keys whose `listChanged`/`subscribe` flags need `subscriptions/listen`, which is not served yet. */
-private val LIST_CAPABILITIES = setOf("tools", "prompts", "resources")
-
 /**
  * The `server/discover` result, built from the synthetic `initialize` result.
  *
  * The capabilities say only what the bridge serves: the legacy `tasks` key is gone from the
- * 2026-07-28 schema, and `listChanged`/`subscribe` are dropped until `subscriptions/listen` exists.
+ * 2026-07-28 schema. `listChanged` and `subscribe` stay as the server declares them, because
+ * `subscriptions/listen` delivers those notifications.
  */
 internal fun discoverResult(initializeResult: JsonObject, cache: CachePolicy): JsonObject {
-    val capabilities = (initializeResult.obj("capabilities") ?: EMPTY_OBJECT)
-        .without("tasks")
-        .let { caps ->
-            JsonObject(
-                caps.mapValues { (key, value) ->
-                    if (key in LIST_CAPABILITIES && value is JsonObject) value.without("listChanged", "subscribe") else value
-                },
-            )
-        }
+    val capabilities = (initializeResult.obj("capabilities") ?: EMPTY_OBJECT).without("tasks")
     return buildJsonObject {
         put("resultType", "complete")
         put("supportedVersions", buildJsonArray { ModernProtocol.SUPPORTED_VERSIONS.forEach { add(JsonPrimitive(it)) } })
@@ -75,6 +65,27 @@ private fun JsonObject.withoutToolExecution(): JsonObject {
     return with("tools", JsonArray(tools.map { tool -> (tool as? JsonObject)?.without("execution") ?: tool }))
 }
 
+internal const val ELICITATION_METHOD: String = "elicitation/create"
+
+/** An `InputRequiredResult` (SEP-2322): the questions by key, and the state the client must echo. */
+internal fun inputRequiredResult(inputRequests: Map<String, JsonObject>, requestState: String, serverInfo: JsonObject?): JsonObject =
+    buildJsonObject {
+        put("resultType", "input_required")
+        put("inputRequests", JsonObject(inputRequests))
+        put("requestState", requestState)
+        if (serverInfo != null) put("_meta", buildJsonObject { put(ModernMetaKeys.SERVER_INFO, serverInfo) })
+    }
+
+/**
+ * The URL elicitations of the SDK's -32042 error (`data.elicitations`, each an `ElicitRequestURLParams`),
+ * or `null` when [error] is something else or carries none.
+ */
+internal fun urlElicitationsIn(error: JsonObject): List<JsonObject>? {
+    if ((error["code"] as? JsonPrimitive)?.intOrNull != LEGACY_URL_ELICITATION_REQUIRED) return null
+    val elicitations = (error.obj("data")?.get("elicitations") as? JsonArray)?.filterIsInstance<JsonObject>()
+    return elicitations?.takeIf { it.isNotEmpty() }
+}
+
 /** An SDK error object with the codes 2026-07-28 retired replaced. */
 internal fun modernError(error: JsonObject): JsonObject {
     val code = (error["code"] as? JsonPrimitive)?.intOrNull
@@ -82,7 +93,7 @@ internal fun modernError(error: JsonObject): JsonObject {
         LEGACY_RESOURCE_NOT_FOUND -> error.with("code", JsonPrimitive(ModernErrorCodes.INVALID_PARAMS))
         LEGACY_URL_ELICITATION_REQUIRED -> errorObject(
             ModernErrorCodes.INTERNAL_ERROR,
-            "The handler needs a URL elicitation, which this kt-mcpx version cannot relay to a modern client yet",
+            "The handler needs a URL elicitation, which a 2026-07-28 client can only be given on tools/call, prompts/get or resources/read",
         )
         else -> error
     }

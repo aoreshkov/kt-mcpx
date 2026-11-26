@@ -79,11 +79,11 @@ class ModernBridgeTest {
         val serverInfo = result["_meta"]!!.jsonObject[ModernMetaKeys.SERVER_INFO]!!.jsonObject
         assertEquals("test-server", serverInfo["name"]!!.jsonPrimitive.content)
         assertEquals("1.2.3", serverInfo["version"]!!.jsonPrimitive.content)
-        // Only what the bridge serves: no legacy tasks, no listChanged/subscribe without subscriptions/listen.
+        // Only what the bridge serves: no legacy tasks; listChanged/subscribe stay for subscriptions/listen.
         val capabilities = result["capabilities"]!!.jsonObject
         assertEquals(setOf("tools", "resources", "logging"), capabilities.keys)
-        assertEquals(JsonObject(emptyMap()), capabilities["tools"])
-        assertEquals(JsonObject(emptyMap()), capabilities["resources"])
+        assertEquals(setOf("listChanged"), capabilities["tools"]!!.jsonObject.keys)
+        assertEquals(setOf("listChanged", "subscribe"), capabilities["resources"]!!.jsonObject.keys)
     }
 
     @Test
@@ -228,19 +228,6 @@ class ModernBridgeTest {
         assertEquals(ModernErrorCodes.MISSING_REQUIRED_CLIENT_CAPABILITY, reply.code)
         // The bridge aborts the call and closes the session, which cancels the waiting handler.
         assertTrue(withTimeout(5.seconds) { handlerEnded.await() } is CancellationException)
-    }
-
-    @Test
-    fun `a declared capability is not relayed yet, and the handler sees an error`() = runBlocking {
-        val server = testServer {
-            addTool(name = "sample", description = "Asks for sampling.") { sampleHello() }
-        }
-        val capabilities = buildJsonObject { put("sampling", JsonObject(emptyMap())) }
-
-        val reply = ModernBridge(server).handle(toolCall("sample", meta = meta(capabilities)), null).response
-
-        assertEquals(200, reply.httpStatus)
-        assertEquals("true", reply.result["isError"]!!.jsonPrimitive.content)
     }
 
     @Test
