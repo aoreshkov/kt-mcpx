@@ -6,7 +6,7 @@ kt-mcpx lets a server built on the official Kotlin SDK answer MCP 2026-07-28 req
 traffic stays on the SDK. Tools, resources and prompts keep their SDK registration code. kt-mcpx is a
 library that kt-mcp uses; it is not kt-mcp, and it is not a port of any other project named "mcpx".
 
-**Status:** 0.2 in development. Tools, resources, resource templates, prompts, completions, MRTR
+**Status:** 0.2.0. Tools, resources, resource templates, prompts, completions, MRTR
 (`input_required`) and `subscriptions/listen` work over Streamable HTTP and stdio, and every required
 2026-07-28 conformance scenario passes. The Tasks extension is planned for 0.3.
 
@@ -20,9 +20,9 @@ From Maven Central, with the same Kotlin SDK minor version (see [Compatibility](
 
 ```kotlin
 dependencies {
-    implementation("app.oreshkov.ktmcpx:kt-mcpx-ktor:0.1.0")  // Streamable HTTP (brings kt-mcpx-core)
-    implementation("app.oreshkov.ktmcpx:kt-mcpx-stdio:0.1.0") // stdio (brings kt-mcpx-core)
-    testImplementation("app.oreshkov.ktmcpx:kt-mcpx-testing:0.1.0")
+    implementation("app.oreshkov.ktmcpx:kt-mcpx-ktor:0.2.0")  // Streamable HTTP (brings kt-mcpx-core)
+    implementation("app.oreshkov.ktmcpx:kt-mcpx-stdio:0.2.0") // stdio (brings kt-mcpx-core)
+    testImplementation("app.oreshkov.ktmcpx:kt-mcpx-testing:0.2.0")
 }
 ```
 
