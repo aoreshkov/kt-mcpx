@@ -200,6 +200,16 @@ class DualEraStdioTest {
     }
 
     @Test
+    fun `a line over the limit gets -32600 and the stream goes on`() = serve(fixtureServer(), maxLineLength = 1024) {
+        send(modern("L1", "tools/call", buildJsonObject { put("name", "x".repeat(200_000)) }))
+        val tooLong = next()
+        assertEquals(ModernErrorCodes.INVALID_REQUEST, tooLong.errorCode)
+        assertEquals(kotlinx.serialization.json.JsonNull, tooLong["id"])
+        send(modern("L2", "tools/list"))
+        assertTrue("test_simple_text" in names(responseTo("L2").result))
+    }
+
+    @Test
     fun `an unsupported modern version is -32022 on stdio too`() = serve(fixtureServer()) {
         send(modern("V1", "tools/list", version = "2099-01-01"))
         assertEquals(ModernErrorCodes.UNSUPPORTED_PROTOCOL_VERSION, responseTo("V1").errorCode)
@@ -309,7 +319,7 @@ class DualEraStdioTest {
  * A server whose `broadcast` tool does what an adopter's log forwarder does: it sends a log message and a
  * resource list change to every session, skipping none.
  */
-private fun broadcastingServer(): Server {
+internal fun broadcastingServer(): Server {
     val server = Server(
         Implementation("broadcasting", "1"),
         ServerOptions(
@@ -382,6 +392,7 @@ private fun serve(
     server: Server,
     configure: suspend (ServerSession) -> Unit = {},
     bridgeConfig: ModernBridge.Config.() -> Unit = {},
+    maxLineLength: Long = 4L * 1024 * 1024,
     block: suspend StdioSession.() -> Unit,
 ) = runBlocking {
     val pipes = Pipes()
@@ -391,7 +402,14 @@ private fun serve(
         withTimeout(10.seconds) {
             coroutineScope {
                 val serving = launch(Dispatchers.IO) {
-                    serveDualEraStdio(server, ModernBridge(server, bridgeConfig), pipes.serverIn, pipes.serverOut, configure)
+                    serveDualEraStdio(
+                        server,
+                        ModernBridge(server, bridgeConfig),
+                        pipes.serverIn,
+                        pipes.serverOut,
+                        maxLineLength = maxLineLength,
+                        configureLegacySession = configure,
+                    )
                 }
                 val reader = readLines(pipes, received)
                 session.block()

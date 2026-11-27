@@ -1,5 +1,5 @@
 public final class app/oreshkov/ktmcpx/stdio/DualEraStdioKt {
-	public static final fun serveDualEraStdio (Lio/modelcontextprotocol/kotlin/sdk/server/Server;Lapp/oreshkov/ktmcpx/ModernBridge;Lkotlinx/io/Source;Lkotlinx/io/Sink;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public static synthetic fun serveDualEraStdio$default (Lio/modelcontextprotocol/kotlin/sdk/server/Server;Lapp/oreshkov/ktmcpx/ModernBridge;Lkotlinx/io/Source;Lkotlinx/io/Sink;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static final fun serveDualEraStdio (Lio/modelcontextprotocol/kotlin/sdk/server/Server;Lapp/oreshkov/ktmcpx/ModernBridge;Lkotlinx/io/Source;Lkotlinx/io/Sink;JLkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun serveDualEraStdio$default (Lio/modelcontextprotocol/kotlin/sdk/server/Server;Lapp/oreshkov/ktmcpx/ModernBridge;Lkotlinx/io/Source;Lkotlinx/io/Sink;JLkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 

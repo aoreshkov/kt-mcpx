@@ -34,13 +34,27 @@ API incompatibly, and each minor version is built against exactly one Kotlin SDK
 - `kt-mcpx-core`: `ModernBridge.Config.maxConcurrentRequests` (default 1000) and `maxListenStreams`
   (default 100). A request over its limit gets -32603 at once: HTTP 503 with `Retry-After: 1` on Ktor,
   the same error line on stdio.
+- `kt-mcpx-stdio`: `serveDualEraStdio(maxLineLength = …)` (default 4 MiB). A longer line gets -32600
+  with a `null` id and is skipped without being held in memory.
+- `kt-mcpx-testing`: the contract kit runs on stdio. `withModernStdioClient(server) { client -> }` runs
+  `serveDualEraStdio` over in-memory pipes; `ModernStdioTestTransport` reaches any stdio server,
+  including a real process. `ModernTestClient` now sits on a `ModernTestTransport`
+  (`ModernHttpTestTransport` or the stdio one); its HTTP constructor is unchanged. On stdio,
+  `ModernContract` skips its header and status checks.
+- `kt-mcpx-testing`: two contract checks: no answer carries a log message its request did not ask for,
+  and no answer carries a `list_changed` or `resources/updated` notification.
+
+### Changed
+
+- `kt-mcpx-stdio`: `serveDualEraStdio` takes `maxLineLength` before `configureLegacySession`. A call
+  that passes `configureLegacySession` as a trailing lambda or by name is unchanged; one that passes it
+  as the fifth positional argument must name it.
 
 ### Fixed
 
 - `kt-mcpx-core`: a log message that an adopter broadcast to every session in `server.sessions` reached
   every modern request's stream that asked for logs. A request's stream now carries only the log
   messages its own handler sent, as 2026-07-28 requires, and `subscriptions/listen` streams carry none.
-
 - `kt-mcpx-stdio`: the legacy SDK session no longer writes `list_changed` broadcasts to stdout before a
   legacy client has sent `initialize`, so a modern-only client never sees notifications it did not
   subscribe to.

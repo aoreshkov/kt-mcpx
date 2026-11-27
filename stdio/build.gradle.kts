@@ -13,6 +13,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
 
     testImplementation(project(":fixture-server"))
+    testImplementation(project(":kt-mcpx-testing"))
     testImplementation(libs.mcp.client)
     testImplementation(libs.kotlinx.coroutines.test)
 }
