@@ -148,6 +148,7 @@ private fun Server.registerTools() {
     }
     server.tool("test_tool_with_progress", "Reports progress 0, 50 and 100 of 100.") { request ->
         val token = request.params.meta?.progressToken
+        awaitLegacyClientStream()
         for ((index, progress) in listOf(0.0, 50.0, 100.0).withIndex()) {
             if (index > 0) delay(50.milliseconds)
             if (token != null) notification(ProgressNotification(ProgressNotificationParams(token, progress, 100.0)))
@@ -155,6 +156,7 @@ private fun Server.registerTools() {
         CallToolResult(content = listOf(TextContent("Progress tool completed")))
     }
     server.tool("test_tool_with_logging", "Logs three messages at info level.") {
+        awaitLegacyClientStream()
         for ((index, message) in listOf("Tool execution started", "Tool processing data", "Tool execution completed").withIndex()) {
             if (index > 0) delay(50.milliseconds)
             log(message)
@@ -285,13 +287,14 @@ private fun Server.registerInputRequiredTools() {
 }
 
 /**
- * Gives a legacy client time to open its GET stream before the tool asks it something.
+ * Gives a legacy client time to open its GET stream before the tool asks it something or reports to it.
  *
  * SDK 0.16.0's `mcpStreamableHttp` answers in JSON mode, so a request the server sends while handling a
- * call (sampling, elicitation) goes out on the client's standalone GET stream, and is dropped without an
- * error if that stream is not open yet. A client may open it after `notifications/initialized` without
- * waiting, then call the tool at once (the conformance suite's does), and the call would hang. The
- * handler cannot see whether the stream is open, so it waits a moment instead.
+ * call (sampling, elicitation), and a notification about the call (progress, logs), goes out on the
+ * client's standalone GET stream, and is dropped without an error if that stream is not open yet. A
+ * client may open it after `notifications/initialized` without waiting, then call the tool at once (the
+ * conformance suite's does): the call would hang, or its first notification would be lost. The handler
+ * cannot see whether the stream is open, so it waits a moment instead.
  */
 private suspend fun awaitLegacyClientStream() = delay(500.milliseconds)
 
