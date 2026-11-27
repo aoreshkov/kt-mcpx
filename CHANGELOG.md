@@ -8,6 +8,10 @@ API incompatibly, and each minor version is built against exactly one Kotlin SDK
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-27
+
+Built against Kotlin SDK 0.16, like 0.1.
+
 ### Added
 
 - `kt-mcpx-core`: MRTR (SEP-2322). On `tools/call`, `prompts/get` and `resources/read`, a handler that
@@ -88,5 +92,6 @@ First release, built against Kotlin SDK 0.16.
 - `kt-mcpx-testing`: `ModernTestClient`, the `ModernContract` kit to run against your own endpoints,
   and `CapturedTraffic`, scrubbed Claude Code 2.1.331 requests for compatibility tests.
 
-[Unreleased]: https://github.com/aoreshkov/kt-mcpx/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/aoreshkov/kt-mcpx/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/aoreshkov/kt-mcpx/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/aoreshkov/kt-mcpx/releases/tag/v0.1.0
