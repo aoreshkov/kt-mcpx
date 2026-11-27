@@ -31,10 +31,14 @@ Analysis and plan documents live in `docs/`, which is private and git-ignored.
     modern POSTs (`ModernRequestSelector`) and lazy SSE.
   - `stdio/` (`:kt-mcpx-stdio`): `serveDualEraStdio(server, bridge) { legacySession -> }` in place of
     `StdioServerTransport`. Modern lines go to the bridge, everything else to one long-lived SDK session;
-    `notifications/cancelled` cancels a modern request in flight. Its tests replay a scrubbed Claude Code
+    `notifications/cancelled` cancels a modern request in flight. Lines are read by `BoundedLines.kt`,
+    which skips a line over `maxLineLength` without buffering it. Its tests replay a scrubbed Claude Code
     stdio capture (`src/test/resources/`).
-  - `testing/` (`:kt-mcpx-testing`): `ModernTestClient`, the `ModernContract` kit, and `CapturedTraffic`.
-    The scrubbed client captures are under `src/main/resources/.../testing/fixtures/`.
+  - `testing/` (`:kt-mcpx-testing`): `ModernTestClient` on a `ModernTestTransport` (HTTP, or stdio via
+    `ModernStdioTestTransport` and `withModernStdioClient`, which runs `serveDualEraStdio` over in-memory
+    pipes), the `ModernContract` kit (header and status checks only over HTTP), and `CapturedTraffic`.
+    The scrubbed client captures are under `src/main/resources/.../testing/fixtures/`. The stdio
+    module's tests run the contract over stdio (`StdioContractTest`).
 - `fixture-server/`: the conformance fixture server (the suite's `test_*` tools, `test_custom_headers`
   with `x-mcp-header` annotations, the `test_input_required_result_*` tools and prompt asking through
   plain SDK calls, the `test_trigger_*_change` tools, prompts, resources, a template and a per-session

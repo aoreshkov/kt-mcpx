@@ -10,5 +10,7 @@ description = "Test kit for kt-mcpx: a raw MCP 2026-07-28 client, a contract che
 dependencies {
     api(project(":kt-mcpx-core"))
     api(libs.ktor.client.core)
+    api(libs.kotlinx.io.core)
+    implementation(project(":kt-mcpx-stdio"))
     implementation(libs.kotlinx.coroutines.core)
 }

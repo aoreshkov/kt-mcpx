@@ -51,7 +51,8 @@ serveDualEraStdio(server, bridge) { session ->
 
 A modern line (`server/discover`, or a request whose `_meta` carries the 2026-07-28 protocol version)
 goes to the bridge. Every other line goes to one long-lived SDK session, as before.
-`notifications/cancelled` stops a modern request in flight. Nothing else may write to stdout. Set
+`notifications/cancelled` stops a modern request in flight. A line longer than `maxLineLength` (default
+4 MiB) gets -32600 and is skipped without being buffered. Nothing else may write to stdout. Set
 `KotlinLoggingConfiguration.logStartupMessage = false`, or the SDK's logging prints a banner there.
 
 ## How it answers
@@ -156,6 +157,26 @@ val bridge = ModernBridge(server) {
     ]
   }
   ```
+
+## Testing your server
+
+`kt-mcpx-testing` checks your endpoint against the 2026-07-28 contract as the bridge implements it, on
+HTTP or stdio:
+
+```kotlin
+// HTTP, in a testApplication
+ModernContract.verify(ModernTestClient(client, "/mcp", extraHeaders = mapOf("Host" to "localhost")),
+    ToolProbe("echo", buildJsonObject { put("text", "hi") })).assertPassed()
+
+// stdio, over in-memory pipes
+withModernStdioClient(server) { client ->
+    ModernContract.verify(client, ToolProbe("echo", buildJsonObject { put("text", "hi") })).assertPassed()
+}
+```
+
+On stdio the header and status checks are skipped. `ModernStdioTestTransport` reaches a real server
+process through its stdin and stdout. `CapturedTraffic` holds scrubbed requests from real clients to
+replay against your server.
 
 ## Compatibility
 

@@ -29,7 +29,6 @@ import kotlinx.io.Source
 import kotlinx.io.asSink
 import kotlinx.io.asSource
 import kotlinx.io.buffered
-import kotlinx.io.readLine
 import kotlinx.io.writeString
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -57,7 +56,9 @@ import java.util.concurrent.ConcurrentHashMap
  *   runs on it before the first line is read, for handlers an adopter installs per session.
  *
  * A line that is not JSON gets a -32700 error, and JSON that is not a JSON-RPC message gets -32600; the
- * SDK transport drops both silently. Blank lines are skipped. Writes are serialized, one message per
+ * SDK transport drops both silently. A line longer than [maxLineLength] bytes (4 MiB by default, not
+ * counting its newline) gets -32600 with a `null` id and is skipped without being held in memory, so a
+ * client cannot make the server buffer an endless line. Blank lines are skipped. Writes are serialized, one message per
  * line. Nothing else may write to [output]: send logs to stderr, and turn off kotlin-logging's startup
  * banner (`KotlinLoggingConfiguration.logStartupMessage = false`), which the SDK's logging would
  * otherwise print to stdout.
@@ -70,8 +71,10 @@ public suspend fun serveDualEraStdio(
     bridge: ModernBridge,
     input: Source = System.`in`.asSource().buffered(),
     output: Sink = System.out.asSink().buffered(),
+    maxLineLength: Long = DEFAULT_MAX_LINE_LENGTH,
     configureLegacySession: suspend (ServerSession) -> Unit = {},
 ): Unit = coroutineScope {
+    require(maxLineLength > 0) { "maxLineLength must be positive, was $maxLineLength" }
     val writer = LineWriter(output)
     val legacy = LegacyStdioTransport(writer)
     val session = server.createSession(legacy)
@@ -79,7 +82,14 @@ public suspend fun serveDualEraStdio(
     try {
         configureLegacySession(session)
         while (true) {
-            val line = runInterruptible(Dispatchers.IO) { input.readLine() } ?: break
+            val line = when (val read = runInterruptible(Dispatchers.IO) { input.readBoundedLine(maxLineLength) }) {
+                null -> break
+                InputLine.TooLong -> {
+                    writer.write(rpcError(null, ModernErrorCodes.INVALID_REQUEST, "Invalid request: the line is longer than $maxLineLength bytes").toString())
+                    continue
+                }
+                is InputLine.Text -> read.text
+            }
             if (line.isBlank()) continue
             when (val frame = classify(line)) {
                 is Frame.Invalid -> writer.write(frame.error.toString())
@@ -115,6 +125,7 @@ public suspend fun serveDualEraStdio(
     }
 }
 
+private const val DEFAULT_MAX_LINE_LENGTH = 4L * 1024 * 1024
 private const val DISCOVER_METHOD = "server/discover"
 private const val CANCELLED_METHOD = "notifications/cancelled"
 

@@ -6,13 +6,7 @@ import app.oreshkov.ktmcpx.ModernMetaKeys
 import app.oreshkov.ktmcpx.ModernParamHeaders
 import app.oreshkov.ktmcpx.ModernProtocol
 import io.ktor.client.HttpClient
-import io.ktor.client.request.header
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
-import io.ktor.http.content.TextContent
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -26,21 +20,30 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * A raw MCP 2026-07-28 client over a Ktor [HttpClient], for tests: it sends exactly what it is told,
- * including broken requests, and returns the HTTP status and every message of the answer.
+ * A raw MCP 2026-07-28 client for tests: it sends exactly what it is told, including broken requests,
+ * and returns every message of the answer, with the HTTP status when [transport] is HTTP.
  *
- * Works with any client, including `testApplication`'s. Its requests carry no `Host` header unless you
- * pass one in [extraHeaders]; the SDK's DNS-rebinding protection rejects such requests, so tests against
- * a localhost-protected route pass `mapOf("Host" to "localhost")`.
+ * Over HTTP, build it on any Ktor client, including `testApplication`'s. Its requests carry no `Host`
+ * header unless you pass one in `extraHeaders`; the SDK's DNS-rebinding protection rejects such
+ * requests, so tests against a localhost-protected route pass `mapOf("Host" to "localhost")`. Over stdio,
+ * use [withModernStdioClient] or a [ModernStdioTestTransport].
  */
 public class ModernTestClient(
-    private val http: HttpClient,
-    private val url: String,
+    public val transport: ModernTestTransport,
     public val clientCapabilities: JsonObject = JsonObject(emptyMap()),
     public val clientInfo: JsonObject? = DEFAULT_CLIENT_INFO,
     public val protocolVersion: String = ModernProtocol.VERSION,
-    private val extraHeaders: Map<String, String> = emptyMap(),
 ) {
+    /** A client that posts to [url] with [http]; see [ModernHttpTestTransport]. */
+    public constructor(
+        http: HttpClient,
+        url: String,
+        clientCapabilities: JsonObject = JsonObject(emptyMap()),
+        clientInfo: JsonObject? = DEFAULT_CLIENT_INFO,
+        protocolVersion: String = ModernProtocol.VERSION,
+        extraHeaders: Map<String, String> = emptyMap(),
+    ) : this(ModernHttpTestTransport(http, url, extraHeaders), clientCapabilities, clientInfo, protocolVersion)
+
     private val ids = AtomicLong()
     private val toolSchemas = ConcurrentHashMap<String, JsonObject>()
 
@@ -56,8 +59,8 @@ public class ModernTestClient(
      *
      * [params] go out as given, plus `_meta`: [meta] replaces the default `_meta` entirely, and
      * [withoutMeta] sends none. [headers] override the standard headers this client derives from the
-     * body (`Mcp-Method`, `Mcp-Name`, `MCP-Protocol-Version`, `Accept`); a `null` value removes one.
-     * [rawBody] sends that text instead of a built body.
+     * body (`Mcp-Method`, `Mcp-Name`, `MCP-Protocol-Version`, `Accept`); a `null` value removes one. A
+     * transport that is not HTTP sends no headers. [rawBody] sends that text instead of a built body.
      */
     public suspend fun send(
         method: String,
@@ -78,22 +81,18 @@ public class ModernTestClient(
             put("method", method)
             put("params", fullParams)
         }.toString()
-        val standard = buildMap {
-            put(ModernHeaderNames.METHOD, method)
-            nameHeaderValue(method, params)?.let { put(ModernHeaderNames.NAME, it) }
-            put(ModernHeaderNames.PROTOCOL_VERSION, (fullParams["_meta"] as? JsonObject)?.stringValue(ModernMetaKeys.PROTOCOL_VERSION) ?: protocolVersion)
-            put(HttpHeaders.Accept, "application/json, text/event-stream")
-        }
-        val merged = (extraHeaders + standard).toMutableMap<String, String?>()
+        if (!transport.isHttp) return transport.send(body, emptyMap())
+        val merged = mutableMapOf<String, String?>(
+            ModernHeaderNames.METHOD to method,
+            ModernHeaderNames.PROTOCOL_VERSION to ((fullParams["_meta"] as? JsonObject)?.stringValue(ModernMetaKeys.PROTOCOL_VERSION) ?: protocolVersion),
+            HttpHeaders.Accept to "application/json, text/event-stream",
+        )
+        nameHeaderValue(method, params)?.let { merged[ModernHeaderNames.NAME] = it }
         headers.forEach { (name, value) ->
             merged.keys.filter { it.equals(name, ignoreCase = true) }.forEach(merged::remove)
             merged[name] = value
         }
-        val response = http.post(url) {
-            merged.forEach { (name, value) -> if (value != null) header(name, value) }
-            setBody(TextContent(body, ContentType.Application.Json))
-        }
-        return ModernResponse(response.status.value, response.headers[HttpHeaders.ContentType], response.bodyAsText())
+        return transport.send(body, merged)
     }
 
     /** Sends [method] with the default `_meta` and returns its `result`, or throws [ModernRpcException]. */
@@ -178,13 +177,22 @@ public class ModernTestClient(
 public class ModernRpcException(public val code: Int, message: String, public val data: JsonElement?) : Exception("$code: $message")
 
 /**
- * One HTTP answer to a modern request: the [status], the [contentType], and the JSON-RPC [messages] in
- * it (one for a JSON answer, every event for an SSE stream).
+ * One answer to a modern request: the HTTP [status] and [contentType], and the JSON-RPC [messages] in it
+ * (one for a JSON answer, every event for an SSE stream, every line on stdio).
  */
-public class ModernResponse(public val status: Int, public val contentType: String?, public val text: String) {
+public class ModernResponse private constructor(
+    public val status: Int,
+    public val contentType: String?,
+    public val text: String,
+    private val receivedLines: List<JsonObject>?,
+) {
+    /** An HTTP answer: [text] is its body. */
+    public constructor(status: Int, contentType: String?, text: String) : this(status, contentType, text, null)
+
     public val isEventStream: Boolean get() = contentType?.startsWith("text/event-stream") == true
 
     public val messages: List<JsonObject> by lazy {
+        receivedLines?.let { return@lazy it }
         val lines = if (isEventStream) {
             text.lineSequence().filter { it.startsWith("data:") }.map { it.removePrefix("data:").trim() }.toList()
         } else {
@@ -218,6 +226,12 @@ public class ModernResponse(public val status: Int, public val contentType: Stri
     }
 
     override fun toString(): String = "ModernResponse(status=$status, contentType=$contentType, text=$text)"
+
+    public companion object {
+        /** An answer that arrived as lines, on stdio: no HTTP status (0) and no content type. */
+        public fun ofLines(messages: List<JsonObject>): ModernResponse =
+            ModernResponse(0, null, messages.joinToString("\n"), messages.toList())
+    }
 }
 
 internal fun JsonObject.stringValue(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content

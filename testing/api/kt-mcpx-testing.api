@@ -51,7 +51,15 @@ public final class app/oreshkov/ktmcpx/testing/ModernContract {
 	public static synthetic fun verify$default (Lapp/oreshkov/ktmcpx/testing/ModernContract;Lapp/oreshkov/ktmcpx/testing/ModernTestClient;Lapp/oreshkov/ktmcpx/testing/ToolProbe;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
+public final class app/oreshkov/ktmcpx/testing/ModernHttpTestTransport : app/oreshkov/ktmcpx/testing/ModernTestTransport {
+	public fun <init> (Lio/ktor/client/HttpClient;Ljava/lang/String;Ljava/util/Map;)V
+	public synthetic fun <init> (Lio/ktor/client/HttpClient;Ljava/lang/String;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun isHttp ()Z
+	public fun send (Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
 public final class app/oreshkov/ktmcpx/testing/ModernResponse {
+	public static final field Companion Lapp/oreshkov/ktmcpx/testing/ModernResponse$Companion;
 	public fun <init> (ILjava/lang/String;Ljava/lang/String;)V
 	public final fun getContentType ()Ljava/lang/String;
 	public final fun getError ()Lkotlinx/serialization/json/JsonObject;
@@ -67,14 +75,32 @@ public final class app/oreshkov/ktmcpx/testing/ModernResponse {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class app/oreshkov/ktmcpx/testing/ModernResponse$Companion {
+	public final fun ofLines (Ljava/util/List;)Lapp/oreshkov/ktmcpx/testing/ModernResponse;
+}
+
 public final class app/oreshkov/ktmcpx/testing/ModernRpcException : java/lang/Exception {
 	public fun <init> (ILjava/lang/String;Lkotlinx/serialization/json/JsonElement;)V
 	public final fun getCode ()I
 	public final fun getData ()Lkotlinx/serialization/json/JsonElement;
 }
 
+public final class app/oreshkov/ktmcpx/testing/ModernStdioKt {
+	public static final fun withModernStdioClient (Lio/modelcontextprotocol/kotlin/sdk/server/Server;Lapp/oreshkov/ktmcpx/ModernBridge;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun withModernStdioClient$default (Lio/modelcontextprotocol/kotlin/sdk/server/Server;Lapp/oreshkov/ktmcpx/ModernBridge;Lkotlin/jvm/functions/Function2;Lkotlin/jvm/functions/Function2;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class app/oreshkov/ktmcpx/testing/ModernStdioTestTransport : app/oreshkov/ktmcpx/testing/ModernTestTransport {
+	public synthetic fun <init> (Lkotlinx/coroutines/CoroutineScope;Lkotlinx/io/Source;Lkotlinx/io/Sink;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lkotlinx/coroutines/CoroutineScope;Lkotlinx/io/Source;Lkotlinx/io/Sink;JLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun isHttp ()Z
+	public fun send (Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
 public final class app/oreshkov/ktmcpx/testing/ModernTestClient {
 	public static final field Companion Lapp/oreshkov/ktmcpx/testing/ModernTestClient$Companion;
+	public fun <init> (Lapp/oreshkov/ktmcpx/testing/ModernTestTransport;Lkotlinx/serialization/json/JsonObject;Lkotlinx/serialization/json/JsonObject;Ljava/lang/String;)V
+	public synthetic fun <init> (Lapp/oreshkov/ktmcpx/testing/ModernTestTransport;Lkotlinx/serialization/json/JsonObject;Lkotlinx/serialization/json/JsonObject;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun <init> (Lio/ktor/client/HttpClient;Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;Lkotlinx/serialization/json/JsonObject;Ljava/lang/String;Ljava/util/Map;)V
 	public synthetic fun <init> (Lio/ktor/client/HttpClient;Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;Lkotlinx/serialization/json/JsonObject;Ljava/lang/String;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun callTool (Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -84,6 +110,7 @@ public final class app/oreshkov/ktmcpx/testing/ModernTestClient {
 	public final fun getClientCapabilities ()Lkotlinx/serialization/json/JsonObject;
 	public final fun getClientInfo ()Lkotlinx/serialization/json/JsonObject;
 	public final fun getProtocolVersion ()Ljava/lang/String;
+	public final fun getTransport ()Lapp/oreshkov/ktmcpx/testing/ModernTestTransport;
 	public final fun listTools (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun paramHeadersFor (Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun request (Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -95,6 +122,11 @@ public final class app/oreshkov/ktmcpx/testing/ModernTestClient {
 public final class app/oreshkov/ktmcpx/testing/ModernTestClient$Companion {
 	public final fun getDEFAULT_CLIENT_INFO ()Lkotlinx/serialization/json/JsonObject;
 	public final fun nameHeaderValue (Ljava/lang/String;Lkotlinx/serialization/json/JsonObject;)Ljava/lang/String;
+}
+
+public abstract interface class app/oreshkov/ktmcpx/testing/ModernTestTransport {
+	public abstract fun isHttp ()Z
+	public abstract fun send (Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class app/oreshkov/ktmcpx/testing/ToolProbe {
